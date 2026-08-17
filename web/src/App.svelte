@@ -27,6 +27,9 @@
   const capacity = $derived(battery?.capacity_percent);
   const tone = $derived(statusTone(battery?.status, present));
   const power = $derived(abs(battery?.power_w));
+  const powerMode = $derived(battery?.power_calculation ?? capabilities?.power_calculation);
+  const derivedPower = $derived(powerMode === 'current_voltage');
+  const powerHeading = $derived(derivedPower ? 'Derived power' : 'Instantaneous power');
 
   function applyTheme(next: boolean) {
     dark = next;
@@ -183,7 +186,7 @@
 
         <div class="w-full flex-1 space-y-4">
           <div>
-            <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-mist">Instantaneous power</p>
+            <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-mist">{powerHeading}</p>
             <p class="mt-1 font-mono text-4xl font-medium tracking-tight">
               {fmtNumber(power, 2)}
               <span class="text-lg text-mist">W</span>
@@ -191,6 +194,13 @@
             <p class="mt-1 text-sm text-mist">
               {#if !present}
                 No pack detected. Auto-fallback to mock is available with <span class="font-mono">--provider mock</span>.
+              {:else if derivedPower}
+                Calculated from <span class="font-mono">current_now × voltage_now</span>
+                {#if tone === 'discharge'}
+                  · drawing from the battery
+                {:else if tone === 'charge'}
+                  · charging the pack
+                {/if}
               {:else if tone === 'discharge'}
                 Drawing from the battery
               {:else if tone === 'charge'}
@@ -227,8 +237,13 @@
         <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.current_now_a, 3, ' A')}</p>
       </article>
       <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Power now</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.power_now_w, 2, ' W')}</p>
+        <p class="text-xs text-mist">{derivedPower ? 'Power estimate' : 'Raw power_now'}</p>
+        <p class="mt-2 font-mono text-lg">
+          {fmtNumber(derivedPower ? power : battery?.power_now_w, 2, ' W')}
+        </p>
+        {#if derivedPower}
+          <p class="mt-1 text-[11px] text-mist">current_now × voltage_now</p>
+        {/if}
       </article>
       <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
         <p class="text-xs text-mist">Energy full</p>

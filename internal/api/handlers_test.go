@@ -67,11 +67,13 @@ func TestCapabilitiesFromSysfsFixture(t *testing.T) {
 		},
 		AvailableFields: []string{"status", "capacity", "energy_full"},
 		Features: discovery.Features{
-			ChargeThresholds: discovery.MethodNone,
-			CycleCount:       true,
-			PowerNow:         true,
-			CurrentVoltage:   true,
-			Temperature:      true,
+			ChargeThresholds:      discovery.MethodNone,
+			CycleCount:            true,
+			PowerNow:              false,
+			RawPowerNowSupported:  false,
+			DerivedPowerSupported: true,
+			CurrentVoltage:        true,
+			Temperature:           true,
 		},
 		AvailableTools: discovery.Tools{TLP: true, TLPVersion: "1.8.0"},
 		KernelModules:  []string{"fujitsu_laptop"},
@@ -126,6 +128,30 @@ func TestCapabilitiesFromSysfsFixture(t *testing.T) {
 	}
 	if !foundCharge {
 		t.Fatal("missing charge_thresholds feature")
+	}
+	if body.FeatureFlags.RawPowerNowSupported || body.FeatureFlags.PowerNow {
+		t.Fatal("raw_power_now_supported must be false when power_now is absent")
+	}
+	if !body.FeatureFlags.DerivedPowerSupported {
+		t.Fatal("derived_power_supported must be true when current and voltage exist")
+	}
+	var raw, derived *discovery.FeatureStatus
+	for i := range body.Features {
+		switch body.Features[i].Key {
+		case "raw_power_now":
+			raw = &body.Features[i]
+		case "derived_power":
+			derived = &body.Features[i]
+		}
+	}
+	if raw == nil || derived == nil {
+		t.Fatal("expected raw_power_now and derived_power features")
+	}
+	if raw.Enabled {
+		t.Fatal("raw power_now should not be enabled")
+	}
+	if !derived.Enabled || derived.WhyNot != "" {
+		t.Fatalf("derived power should be enabled without why_not: %+v", derived)
 	}
 	if !body.Tools.TLP || body.Tools.TLPVersion != "1.8.0" {
 		t.Fatalf("tools %+v", body.Tools)

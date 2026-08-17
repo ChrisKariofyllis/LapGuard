@@ -31,31 +31,50 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		cycle.Recommendation = "Wear can still be estimated from energy_full / energy_full_design when those exist."
 	}
 
-	power := FeatureStatus{
-		Key:             "power_now",
-		Label:           "Power now",
-		Enabled:         report.Features.PowerNow,
+	raw := report.Features.RawPowerNowSupported || report.Features.PowerNow
+	derived := report.Features.DerivedPowerSupported || report.Features.CurrentVoltage
+
+	rawPower := FeatureStatus{
+		Key:             "raw_power_now",
+		Label:           "Raw power_now",
+		Enabled:         raw,
 		DetectionMethod: "sysfs:" + battery.FieldPowerNow,
 	}
-	if power.Enabled {
-		power.Recommendation = "Instantaneous power is read from power_now."
-	} else if report.Features.CurrentVoltage {
-		power.WhyNot = "sysfs power_now is absent"
-		power.Recommendation = "Power will be computed from current_now × voltage_now."
-		power.DetectionMethod = "derived:current_now*voltage_now"
+	if rawPower.Enabled {
+		rawPower.Recommendation = "Instantaneous power is read from the power_now sysfs file."
 	} else {
-		power.WhyNot = "Neither power_now nor current_now+voltage_now is available"
-		power.Recommendation = "Power (W) cannot be computed on this hardware."
+		rawPower.WhyNot = "sysfs power_now is not present"
+		if derived {
+			rawPower.Recommendation = "This is expected on packs like the Fujitsu A3510. Use the derived power estimate instead."
+		} else {
+			rawPower.Recommendation = "No power_now file and no current/voltage pair to estimate watts."
+		}
+	}
+
+	derivedPower := FeatureStatus{
+		Key:             "derived_power",
+		Label:           "Derived power",
+		Enabled:         derived,
+		DetectionMethod: "derived:current_now*voltage_now",
+	}
+	if derivedPower.Enabled {
+		derivedPower.Recommendation = "Power estimate is calculated from current_now × voltage_now. 0 W is valid when current_now is zero."
+	} else if raw {
+		derivedPower.WhyNot = "current_now and/or voltage_now is missing"
+		derivedPower.Recommendation = "Not required; sysfs power_now supplies instantaneous power."
+	} else {
+		derivedPower.WhyNot = "current_now and/or voltage_now is missing"
+		derivedPower.Recommendation = "Power (W) cannot be estimated on this hardware."
 	}
 
 	cv := FeatureStatus{
 		Key:             "current_voltage",
-		Label:           "Current × voltage",
-		Enabled:         report.Features.CurrentVoltage,
+		Label:           "Current × voltage sensors",
+		Enabled:         derived,
 		DetectionMethod: "sysfs:current_now+voltage_now",
 	}
 	if cv.Enabled {
-		cv.Recommendation = "current_now and voltage_now are present."
+		cv.Recommendation = "current_now and voltage_now are present and used for the derived power estimate."
 	} else {
 		cv.WhyNot = "current_now and/or voltage_now is missing"
 		cv.Recommendation = "Voltage/current gauges are unavailable; rely on power_now or capacity."
@@ -100,5 +119,5 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		docker.Recommendation = "Host shutdown can still be added later without Docker drain."
 	}
 
-	return []FeatureStatus{charge, cycle, power, cv, temp, alarm, docker}
+	return []FeatureStatus{charge, cycle, rawPower, derivedPower, cv, temp, alarm, docker}
 }

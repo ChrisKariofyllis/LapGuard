@@ -16,7 +16,16 @@ On startup (and on `GET /api/v1/discover`) LapGuard scans:
 
 Charge-threshold method is chosen in order: **sysfs → tlp → none**. Unsupported hardware is not an error; the report includes `why_not`. The Fujitsu Lifebook is the reference edge case: `fujitsu_laptop` may load and TLP may be installed, yet charge control never registers, so the method is `none`.
 
-Telemetry accepts both sysfs naming conventions (`energy_*` and `charge_*`). A missing file is omitted, not a failure. Power is `power_now` when present, otherwise `voltage_now * current_now` (negative while discharging). Health is `energy_full / energy_full_design` or `charge_full / charge_full_design`.
+Telemetry accepts both sysfs naming conventions (`energy_*` and `charge_*`). A missing file is omitted, not a failure.
+
+Power semantics:
+
+- `raw_power_now_supported` — sysfs `power_now` is present
+- `derived_power_supported` — `current_now` and `voltage_now` can be multiplied
+- Displayed watts prefer `power_now`, otherwise `current_now × voltage_now` (negative while discharging)
+- `0 W` is a real reading when `current_now` is zero, not a missing capability
+
+Health is `energy_full / energy_full_design` or `charge_full / charge_full_design`.
 
 Threshold **writes** are wired in `internal/thresholds` (sysfs `charge_control_*` or `tlp setcharge START STOP BATX`) but are **not** exposed over HTTP yet.
 

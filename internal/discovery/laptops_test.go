@@ -120,7 +120,6 @@ NATACPI    = active (start = 50, stop = 80)
 					"energy_now":         "32000000",
 					"energy_full":        "42100000",
 					"energy_full_design": "50000000",
-					"power_now":          "14082000",
 					"voltage_now":        "11412000",
 					"current_now":        "-1234000",
 					"cycle_count":        "312",
@@ -148,7 +147,7 @@ tp-smapi   = inactive (unsupported hardware)
 			wantTLP:         true,
 			wantTLPCanSet:   false,
 			wantCycle:       true,
-			wantPowerNow:    true,
+			wantPowerNow:    false,
 			wantCurrentVolt: true,
 			wantNaming:      "energy",
 			whyContains:     "fujitsu_laptop",
@@ -250,6 +249,12 @@ tp-smapi   = inactive (unsupported hardware)
 			if report.Features.PowerNow != tc.wantPowerNow {
 				t.Fatalf("power_now=%v", report.Features.PowerNow)
 			}
+			if report.Features.RawPowerNowSupported != tc.wantPowerNow {
+				t.Fatalf("raw_power_now_supported=%v", report.Features.RawPowerNowSupported)
+			}
+			if report.Features.DerivedPowerSupported != tc.wantCurrentVolt {
+				t.Fatalf("derived_power_supported=%v", report.Features.DerivedPowerSupported)
+			}
 			if report.Features.CurrentVoltage != tc.wantCurrentVolt {
 				t.Fatalf("current_voltage=%v", report.Features.CurrentVoltage)
 			}
@@ -267,6 +272,9 @@ tp-smapi   = inactive (unsupported hardware)
 			if tc.name == "fujitsu" {
 				if report.Features.Temperature != true {
 					t.Fatal("fujitsu fixture should expose temp")
+				}
+				if report.PowerCalculation != "current_voltage" {
+					t.Fatalf("fujitsu power method %q, want current_voltage", report.PowerCalculation)
 				}
 				foundNote := false
 				for _, n := range report.Notes {
@@ -296,6 +304,12 @@ tp-smapi   = inactive (unsupported hardware)
 					if tc.wantMethod == MethodNone && f.WhyNot == "" {
 						t.Fatal("unsupported charge thresholds must include why_not")
 					}
+				}
+				if f.Key == "raw_power_now" && f.Enabled != tc.wantPowerNow {
+					t.Fatalf("raw_power_now enabled=%v, want %v", f.Enabled, tc.wantPowerNow)
+				}
+				if f.Key == "derived_power" && f.Enabled != tc.wantCurrentVolt {
+					t.Fatalf("derived_power enabled=%v, want %v", f.Enabled, tc.wantCurrentVolt)
 				}
 			}
 		})

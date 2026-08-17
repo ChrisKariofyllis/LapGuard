@@ -65,11 +65,16 @@ type Supply struct {
 type Features struct {
 	ChargeThresholds string `json:"charge_thresholds"` // "sysfs" | "tlp" | "none"
 	CycleCount       bool   `json:"cycle_count"`
-	PowerNow         bool   `json:"power_now"`
-	CurrentVoltage   bool   `json:"current_voltage"`
-	Temperature      bool   `json:"temperature"`
-	AlarmControl     bool   `json:"alarm_control"`
-	DockerShutdown   bool   `json:"docker_shutdown"`
+	// PowerNow is true only when sysfs power_now exists (same as RawPowerNowSupported).
+	PowerNow bool `json:"power_now"`
+	// RawPowerNowSupported is true only when the power_now sysfs file exists.
+	RawPowerNowSupported bool `json:"raw_power_now_supported"`
+	// DerivedPowerSupported is true when current_now and voltage_now can be multiplied.
+	DerivedPowerSupported bool `json:"derived_power_supported"`
+	CurrentVoltage        bool `json:"current_voltage"`
+	Temperature           bool `json:"temperature"`
+	AlarmControl          bool `json:"alarm_control"`
+	DockerShutdown        bool `json:"docker_shutdown"`
 }
 
 // Tools lists userspace helpers that LapGuard can detect.

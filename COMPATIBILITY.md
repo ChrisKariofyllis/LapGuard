@@ -14,16 +14,27 @@ Charge-threshold method preference:
    `tlp setcharge START STOP BATX`
 3. **none** — no writable firmware limit
 
+## Power readings
+
+LapGuard separates the raw sysfs file from the displayed wattage:
+
+| Flag | Meaning |
+| --- | --- |
+| `raw_power_now_supported` | `/sys/class/power_supply/BAT*/power_now` exists |
+| `derived_power_supported` | `current_now` and `voltage_now` exist, so watts = current × voltage |
+
+The UI shows **Derived power** / **Power estimate** when only the current×voltage path is available. That is not “unsupported power”. A calculated **0 W** is valid when `current_now` is zero (idle / full).
+
 ## Tested machines
 
 | Machine | Role | Battery sysfs | Charge thresholds | Notes |
 | --- | --- | --- | --- | --- |
-| Fujitsu Lifebook | Production target | `energy_*`, `power_now`, `cycle_count`, `temp` | **none** | `fujitsu_laptop` loads but does not register charge control (dmesg: *Unable to register battery charge control*). TLP may be installed and still cannot set limits. |
+| Fujitsu Lifebook A3510 | Production target | `energy_*`, `current_now`, `voltage_now`, `cycle_count`, `temp` — **no** `power_now` | **none** | `raw_power_now_supported=false`, `derived_power_supported=true`. `fujitsu_laptop` loads but does not register charge control (dmesg: *Unable to register battery charge control*). TLP may be installed and still cannot set limits. |
 | HP ProDesk | Development box | no pack | **none** | No `/sys/class/power_supply/BAT*`. Provider `auto` falls back to mock telemetry. Discovery still reports host modules/tools. |
 | ThinkPad (typical, mocked) | Profile | `energy_*` plus `charge_control_*` | **sysfs** (TLP also present) | `thinkpad_acpi` (+ `acpi_call` on some generations). If sysfs charge control is absent but TLP NATACPI is active, method is **tlp**. |
-| Dell XPS (typical, mocked) | Profile | `charge_*` plus `charge_control_*` | **sysfs** | `dell_wmi` / `dell_smbios`. TLP may also be installed; sysfs wins. |
+| Dell XPS (typical, mocked) | Profile | `charge_*` plus `charge_control_*` | **sysfs** | `dell_wmi` / `dell_smbios`. TLP may also be installed; sysfs wins. Often no `power_now`; derived power from current×voltage. |
 | ASUS notebook (typical, mocked) | Profile | `charge_*`, often end-threshold only | **sysfs** | `asus_wmi` / `asus_nb_wmi`. Many models only expose `charge_control_end_threshold`. |
-| Generic ACPI battery (mocked) | Profile | `energy_*` or `charge_*`, no vendor extras | **none** | Power from `power_now` or `current_now × voltage_now`. Telemetry only. |
+| Generic ACPI battery (mocked) | Profile | `energy_*` or `charge_*`, no vendor extras | **none** | Power from `power_now` or derived `current_now × voltage_now`. Telemetry only. |
 
 ## Kernel modules LapGuard looks for
 
@@ -51,5 +62,6 @@ Charge-threshold method preference:
 
 1. Run LapGuard on the machine and open `GET /api/v1/discover`.
 2. Confirm `features.charge_thresholds` is `sysfs`, `tlp`, or `none`.
-3. Record the battery naming convention (`energy` / `charge` / `both`) and any vendor module.
-4. Send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.
+3. Record `raw_power_now_supported` vs `derived_power_supported` (absence of `power_now` is not a failure if current×voltage works).
+4. Record the battery naming convention (`energy` / `charge` / `both`) and any vendor module.
+5. Send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.

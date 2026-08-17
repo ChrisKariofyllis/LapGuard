@@ -8,3 +8,7 @@
 .DS_Store
 .env
 .env.*
+
+# Local build artifacts
+/lapguard
+/lapguard-linux-*

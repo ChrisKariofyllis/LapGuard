@@ -49,6 +49,18 @@ func TestChargeToEnergyWh(t *testing.T) {
 	}
 }
 
+func TestPowerWattsZeroCurrentIsZeroWatts(t *testing.T) {
+	v := 11.412
+	i := 0.0
+	got := PowerWatts(nil, &v, &i, "Not charging")
+	if got == nil {
+		t.Fatal("expected 0 W, not a missing value")
+	}
+	if *got != 0 {
+		t.Fatalf("got %v, want 0", *got)
+	}
+}
+
 func TestPowerWattsMissingInputs(t *testing.T) {
 	if PowerWatts(nil, nil, nil, "Discharging") != nil {
 		t.Fatal("expected nil when no measurements exist")
@@ -297,6 +309,39 @@ func TestSysfsProviderChargeConvention(t *testing.T) {
 	if !contains(snap.AvailableFields, FieldChargeFull) {
 		t.Fatalf("available_fields %v", snap.AvailableFields)
 	}
+}
+
+func TestSysfsProviderDerivedPowerZeroCurrent(t *testing.T) {
+	root := t.TempDir()
+	bat := filepath.Join(root, "BAT0")
+	if err := os.MkdirAll(bat, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"type":        "Battery",
+		"present":     "1",
+		"status":      "Not charging",
+		"capacity":    "100",
+		"voltage_now": "11412000",
+		"current_now": "0",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(bat, name), []byte(body+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := NewSysfsProvider(root, "BAT0")
+	snap, err := p.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Battery.PowerNowW != nil {
+		t.Fatal("raw power_now should be absent")
+	}
+	if snap.Battery.PowerCalculation != PowerMethodCurrentVoltage {
+		t.Fatalf("power method %q", snap.Battery.PowerCalculation)
+	}
+	assertFloat(t, "derived power at rest", snap.Battery.PowerW, 0)
 }
 
 func TestOpenAutoFallsBackToMock(t *testing.T) {

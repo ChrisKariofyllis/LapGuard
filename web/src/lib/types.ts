@@ -86,6 +86,8 @@ export type Capabilities = {
     charge_thresholds: string;
     cycle_count: boolean;
     power_now: boolean;
+    raw_power_now_supported: boolean;
+    derived_power_supported: boolean;
     current_voltage: boolean;
     temperature: boolean;
     alarm_control: boolean;
