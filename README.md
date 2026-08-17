@@ -1,5 +1,9 @@
 # LapGuard
 
+[![CI](https://github.com/ChrisKariofyllis/LapGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisKariofyllis/LapGuard/actions/workflows/ci.yml)
+[![Latest Alpha Release](https://img.shields.io/github/v/release/ChrisKariofyllis/LapGuard?include_prereleases&label=latest%20alpha)](https://github.com/ChrisKariofyllis/LapGuard/releases)
+[![License](https://img.shields.io/github/license/ChrisKariofyllis/LapGuard)](https://github.com/ChrisKariofyllis/LapGuard/blob/main/LICENSE)
+
 Lightweight Linux laptop power manager for machines that stay on as 24/7 home servers.
 
 Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
@@ -256,3 +260,7 @@ contrib/systemd/             # user and system unit templates
 testdata/sysfs/BAT0/
 web/
 ```
+
+## License
+
+LapGuard is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
