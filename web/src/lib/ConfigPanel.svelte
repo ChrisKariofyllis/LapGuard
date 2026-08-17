@@ -1,18 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchConfig, putConfig } from './api';
+  import { fetchConfig, putConfig, testNotification } from './api';
   import type { AppConfig, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
 
   let loading = $state(true);
   let saving = $state(false);
+  let testing = $state(false);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
+  let testResult = $state<string | null>(null);
+  let testFailed = $state(false);
   let showWebhook = $state(false);
   let notes = $state<string[]>([]);
+  let execution = $state('unconfigured');
+  let webhookConfigured = $state(false);
+  let chatConfigured = $state(false);
 
   let notifications = $state<NotificationsConfig>({
     provider: 'none',
     enabled: false,
+    dry_run: false,
     webhook_url: '',
     chat_id: '',
   });
@@ -39,11 +46,24 @@
     return null;
   });
 
+  const canTest = $derived(
+    notifications.enabled && notifications.provider !== 'none' && (webhookConfigured || Boolean(notifications.webhook_url)),
+  );
+
   function applyView(cfg: AppConfig) {
-    notifications = { ...cfg.notifications };
+    webhookConfigured = Boolean(cfg.notifications.webhook_configured);
+    chatConfigured = Boolean(cfg.notifications.chat_id_configured);
+    notifications = {
+      provider: cfg.notifications.provider,
+      enabled: cfg.notifications.enabled,
+      dry_run: Boolean(cfg.notifications.dry_run),
+      webhook_url: '',
+      chat_id: '',
+    };
     shutdown = { ...cfg.shutdown };
     docker = { ...cfg.docker };
     notes = cfg.notes ?? [];
+    execution = cfg.execution?.notifications ?? 'unconfigured';
   }
 
   async function load() {
@@ -69,11 +89,33 @@
       const next = await putConfig({ notifications, shutdown, docker });
       applyView(next);
       error = null;
-      notice = 'Settings saved. Notifications, Docker stop, and shutdown are stored only — they are not executed yet.';
+      notice = 'Settings saved. Secrets stay on disk and are not shown here.';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unable to save configuration';
     } finally {
       saving = false;
+    }
+  }
+
+  async function sendTest() {
+    testing = true;
+    testResult = null;
+    testFailed = false;
+    try {
+      const result = await testNotification();
+      testFailed = !result.ok;
+      if (result.ok) {
+        testResult = result.dry_run
+          ? `Dry-run OK (${result.provider ?? notifications.provider}) — no HTTP request was sent.`
+          : `Sent via ${result.provider ?? notifications.provider}.`;
+      } else {
+        testResult = result.error || 'Test notification failed.';
+      }
+    } catch (err) {
+      testFailed = true;
+      testResult = err instanceof Error ? err.message : 'Test notification failed.';
+    } finally {
+      testing = false;
     }
   }
 
@@ -118,9 +160,11 @@
     <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Notifications</h3>
-        <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">Stored only</span>
+        <span class="rounded-full px-2.5 py-0.5 font-mono text-[11px] {execution === 'ready' || execution === 'dry_run' ? 'bg-mint/15 text-mint' : 'bg-amber/15 text-amber'}">{execution}</span>
       </div>
-      <p class="mt-1 text-xs text-mist">Webhook URL and chat ID are saved, but no messages are sent in this milestone.</p>
+      <p class="mt-1 text-xs text-mist">
+        Alerts fire for AC connect/disconnect and battery warning/critical. Delivery is off until you enable it.
+      </p>
 
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
         <label class="block text-xs text-mist">
@@ -130,15 +174,22 @@
             bind:value={notifications.provider}
           >
             <option value="none">None</option>
+            <option value="ntfy">ntfy</option>
             <option value="telegram">Telegram</option>
             <option value="discord">Discord</option>
             <option value="webhook">Generic webhook</option>
           </select>
         </label>
-        <label class="flex items-end gap-2 text-sm text-snow">
-          <input type="checkbox" bind:checked={notifications.enabled} />
-          Enable notifications
-        </label>
+        <div class="flex flex-col justify-end gap-2 text-sm text-snow">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" bind:checked={notifications.enabled} />
+            Enable notifications
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" bind:checked={notifications.dry_run} />
+            Dry-run (log only, no HTTP)
+          </label>
+        </div>
         <label class="block text-xs text-mist sm:col-span-2">
           Webhook URL
           <div class="mt-1 flex gap-2">
@@ -147,7 +198,7 @@
               type={showWebhook ? 'url' : 'password'}
               autocomplete="off"
               spellcheck="false"
-              placeholder="https://"
+              placeholder={webhookConfigured ? 'Saved — enter a new URL to replace' : 'https://'}
               bind:value={notifications.webhook_url}
             />
             <button
@@ -165,19 +216,25 @@
             class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
             type="text"
             autocomplete="off"
-            placeholder="Telegram chat id"
+            placeholder={chatConfigured ? 'Saved — enter a new chat ID to replace' : 'Telegram chat id'}
             bind:value={notifications.chat_id}
           />
         </label>
       </div>
-      <button
-        type="button"
-        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist opacity-50"
-        disabled
-        title="Notification delivery is not implemented yet"
-      >
-        Send test notification
-      </button>
+      <div class="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+          disabled={testing || loading || !canTest}
+          title={canTest ? 'Send a test message through the configured provider' : 'Enable notifications and configure a provider first'}
+          onclick={() => void sendTest()}
+        >
+          {testing ? 'Sending…' : 'Send test notification'}
+        </button>
+        {#if testResult}
+          <p class="text-xs {testFailed ? 'text-rose' : 'text-mint'}">{testResult}</p>
+        {/if}
+      </div>
     </div>
 
     <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
@@ -186,7 +243,7 @@
         <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">Stored only</span>
       </div>
       <p class="mt-1 text-xs text-mist">
-        Thresholds are validated and persisted. LapGuard will not power off the machine yet.
+        Thresholds are validated and persisted. LapGuard will not power off the machine yet. Warning and critical percents are also used for battery notifications.
       </p>
 
       <div class="mt-3 grid gap-3 sm:grid-cols-3">

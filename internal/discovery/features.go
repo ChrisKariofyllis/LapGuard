@@ -151,8 +151,12 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		Enabled:         report.Features.Notifications,
 		DetectionMethod: "config",
 	}
-	notify.WhyNot = "notification delivery is not implemented in this milestone"
-	notify.Recommendation = "Webhook settings can be stored, but no messages are sent yet."
+	if notify.Enabled {
+		notify.Recommendation = "AC connect/disconnect and battery warning/critical alerts can be delivered through the configured provider."
+	} else {
+		notify.WhyNot = "no notification provider is configured"
+		notify.Recommendation = "Select ntfy, Telegram, or Discord and save the required fields. A webhook URL with provider none is not enough."
+	}
 
 	graceful := FeatureStatus{
 		Key:             "graceful_shutdown",

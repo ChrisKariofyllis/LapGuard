@@ -14,6 +14,7 @@ import (
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
 	"lapguard/internal/discovery"
+	"lapguard/internal/notify"
 	"lapguard/internal/power"
 	"lapguard/internal/storage"
 )
@@ -26,8 +27,9 @@ type Server struct {
 	mu  sync.RWMutex
 	cfg config.Config
 
-	watcher *power.Watcher
-	events  *storage.Store
+	watcher  *power.Watcher
+	events   *storage.Store
+	notifier *notify.Service
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
@@ -38,11 +40,32 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 	if disc == nil {
 		disc = discovery.Static{}
 	}
-	return &Server{
+	s := &Server{
 		provider: provider,
 		cfg:      cfg,
 		log:      log,
 		disc:     disc,
+	}
+	s.notifier = notify.New(notify.Options{
+		Config: func() config.NotificationsConfig {
+			return s.currentConfig().Notifications
+		},
+		Logger: log,
+	})
+	return s
+}
+
+func (s *Server) Notifier() *notify.Service {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.notifier
+}
+
+func (s *Server) AttachNotifier(n *notify.Service) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n != nil {
+		s.notifier = n
 	}
 }
 
@@ -62,11 +85,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/config", s.handlePutConfig)
 	mux.HandleFunc("POST /api/v1/config/notifications", s.handlePostNotifications)
 	mux.HandleFunc("POST /api/v1/config/shutdown", s.handlePostShutdown)
+	mux.HandleFunc("POST /api/v1/actions/test-notification", s.handleTestNotification)
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
+}
+
+func (s *Server) Config() config.Config {
+	return s.currentConfig()
 }
 
 func (s *Server) currentConfig() config.Config {
@@ -186,11 +214,12 @@ func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Confi
 	if method == discovery.MethodNone && report.Thresholds.Recommendation == "" {
 		report.Thresholds.Recommendation = "Charge start/stop limits are not available on this hardware."
 	}
-	report.Features.Notifications = false
 	report.Features.GracefulShutdown = false
 	s.mu.RLock()
 	report.Features.OutageEventLog = s.events != nil
+	notifierReady := s.notifier != nil
 	s.mu.RUnlock()
+	report.Features.Notifications = notifierReady && cfg.Notifications.ProviderConfigured()
 	return report
 }
 
@@ -244,6 +273,7 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 			"config":               "/api/v1/config",
 			"config_notifications": "/api/v1/config/notifications",
 			"config_shutdown":      "/api/v1/config/shutdown",
+			"test_notification":    "/api/v1/actions/test-notification",
 			"power":                "/api/v1/power",
 			"events":               "/api/v1/events",
 		},

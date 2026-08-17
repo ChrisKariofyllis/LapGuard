@@ -114,7 +114,9 @@ func (w *Watcher) Status() WatcherStatus {
 	return st
 }
 
-// Run polls until ctx is cancelled. It never executes shutdown, Docker, or notifications.
+// Run polls until ctx is cancelled. Notification delivery is handled by the
+// process OnEvent hook, not by the watcher itself. It never executes shutdown
+// or Docker commands.
 func (w *Watcher) Run(ctx context.Context) {
 	w.mu.Lock()
 	w.running = true

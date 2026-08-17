@@ -14,6 +14,7 @@ import (
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
 	"lapguard/internal/discovery"
+	"lapguard/internal/notify"
 	"lapguard/internal/power"
 	"lapguard/internal/storage"
 	"lapguard/internal/thresholds"
@@ -36,7 +37,7 @@ func run(args []string) error {
 	if cfg.LogJSON {
 		handler = slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
-	log := slog.New(handler)
+	log := slog.New(config.NewRedactingHandler(handler))
 	slog.SetDefault(log)
 
 	log.Info("starting lapguard",
@@ -109,26 +110,59 @@ func run(args []string) error {
 		}
 	}
 
+	app := api.New(provider, cfg, log, disc)
+	notifier := app.Notifier()
+
 	watcher := power.NewWatcher(power.Options{
 		SysfsRoot: cfg.SysfsRoot,
 		Interval:  cfg.PowerPoll,
 		Debounce:  cfg.PowerDebounce,
 		Logger:    log,
 		OnEvent: func(tr power.Transition) {
-			if store == nil {
-				return
+			if store != nil {
+				if _, err := store.Insert(context.Background(), storage.Event{
+					Type:       tr.Type,
+					Timestamp:  tr.At,
+					Source:     tr.Source,
+					DurationMs: tr.DurationMs,
+				}); err != nil {
+					log.Error("persist power event", "err", err, "type", tr.Type)
+				}
 			}
-			if _, err := store.Insert(context.Background(), storage.Event{
-				Type:       tr.Type,
-				Timestamp:  tr.At,
-				Source:     tr.Source,
-				DurationMs: tr.DurationMs,
-			}); err != nil {
-				log.Error("persist power event", "err", err, "type", tr.Type)
+			nctx, cancel := context.WithTimeout(context.Background(), notify.DefaultTestTimeout)
+			defer cancel()
+			if err := notifier.HandlePower(nctx, tr); err != nil {
+				log.Error("notification", "err", notify.SanitizeError(err), "type", tr.Type)
 			}
 		},
 	})
 	go watcher.Run(ctx)
+	app.AttachPower(watcher, store)
+
+	go notify.WatchLevels(ctx, notify.LevelOptions{
+		Interval: cfg.PowerPoll,
+		Logger:   log,
+		Read: func(ctx context.Context) (notify.LevelReading, error) {
+			snap, err := provider.Snapshot(ctx)
+			if err != nil {
+				return notify.LevelReading{}, err
+			}
+			reading := notify.LevelReading{
+				Present:     snap.Battery.Present,
+				Discharging: notify.IsDischarging(snap.Battery.Status),
+			}
+			if snap.Battery.CapacityPercent != nil {
+				reading.Percent = *snap.Battery.CapacityPercent
+				reading.PercentOK = true
+			}
+			return reading, nil
+		},
+		Thresholds: func() (warning, critical int) {
+			sh := app.Config().Shutdown
+			return sh.WarningThreshold, sh.CriticalThreshold
+		},
+		Send: notifier.Send,
+	})
 
 	if cfg.ShouldWrite() {
 		if err := cfg.Save(cfg.ConfigPath); err != nil {
@@ -138,8 +172,6 @@ func run(args []string) error {
 		}
 	}
 
-	app := api.New(provider, cfg, log, disc)
-	app.AttachPower(watcher, store)
 	httpSrv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           app.Handler(),

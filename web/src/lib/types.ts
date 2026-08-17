@@ -106,13 +106,16 @@ export type Capabilities = {
   battery: BatteryIdentity;
 };
 
-export type NotificationProvider = 'none' | 'telegram' | 'discord' | 'webhook';
+export type NotificationProvider = 'none' | 'ntfy' | 'telegram' | 'discord' | 'webhook';
 
 export type NotificationsConfig = {
   provider: NotificationProvider;
   enabled: boolean;
+  dry_run?: boolean;
   webhook_url: string;
   chat_id: string;
+  webhook_configured?: boolean;
+  chat_id_configured?: boolean;
 };
 
 export type ShutdownConfig = {

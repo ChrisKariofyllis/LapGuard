@@ -8,23 +8,43 @@ import (
 
 const (
 	NotifyProviderNone     = "none"
+	NotifyProviderNtfy     = "ntfy"
 	NotifyProviderTelegram = "telegram"
 	NotifyProviderDiscord  = "discord"
 	NotifyProviderWebhook  = "webhook"
 
-	ExecutionStoredOnly = "stored_only"
+	ExecutionStoredOnly   = "stored_only"
+	ExecutionUnconfigured = "unconfigured"
+	ExecutionDisabled     = "disabled"
+	ExecutionDryRun       = "dry_run"
+	ExecutionReady        = "ready"
+	RedactedSecret        = "[redacted]"
 
 	maxWebhookURLLen = 2048
 	maxChatIDLen     = 128
 	maxDockerTimeout = 3600
 )
 
-// NotificationsConfig is persisted only. Delivery is not implemented in this milestone.
+// NotificationsConfig is the persisted notification settings. Secrets stay in
+// the config file and are never copied into API responses or logs.
 type NotificationsConfig struct {
 	Provider   string `json:"provider"`
 	Enabled    bool   `json:"enabled"`
+	DryRun     bool   `json:"dry_run"`
 	WebhookURL string `json:"webhook_url"`
 	ChatID     string `json:"chat_id"`
+}
+
+// NotificationsView is the HTTP representation. Webhook URLs, bot tokens, and
+// chat IDs are omitted; *_configured flags tell the UI that a secret is stored.
+type NotificationsView struct {
+	Provider          string `json:"provider"`
+	Enabled           bool   `json:"enabled"`
+	DryRun            bool   `json:"dry_run"`
+	WebhookURL        string `json:"webhook_url"`
+	ChatID            string `json:"chat_id"`
+	WebhookConfigured bool   `json:"webhook_configured"`
+	ChatIDConfigured  bool   `json:"chat_id_configured"`
 }
 
 // ShutdownConfig is persisted only. Host shutdown is not executed in this milestone.
@@ -48,11 +68,11 @@ type ExecutionStatus struct {
 
 // APIConfig is the HTTP view of user-managed settings.
 type APIConfig struct {
-	Notifications NotificationsConfig `json:"notifications"`
-	Shutdown      ShutdownConfig      `json:"shutdown"`
-	Docker        DockerConfig        `json:"docker"`
-	Execution     ExecutionStatus     `json:"execution"`
-	Notes         []string            `json:"notes,omitempty"`
+	Notifications NotificationsView `json:"notifications"`
+	Shutdown      ShutdownConfig    `json:"shutdown"`
+	Docker        DockerConfig      `json:"docker"`
+	Execution     ExecutionStatus   `json:"execution"`
+	Notes         []string          `json:"notes,omitempty"`
 }
 
 func DefaultNotifications() NotificationsConfig {
@@ -80,13 +100,59 @@ func StoredOnlyExecution() ExecutionStatus {
 
 func (c Config) APIView() APIConfig {
 	return APIConfig{
-		Notifications: c.Notifications,
+		Notifications: c.Notifications.Public(),
 		Shutdown:      c.Shutdown,
 		Docker:        c.Docker,
-		Execution:     StoredOnlyExecution(),
-		Notes: []string{
-			"Notification delivery, Docker container stop, and shutdown are stored but not executed in this milestone.",
+		Execution: ExecutionStatus{
+			Notifications: c.Notifications.ExecutionState(),
+			Shutdown:      ExecutionStoredOnly,
+			Docker:        ExecutionStoredOnly,
 		},
+		Notes: []string{
+			"Notification delivery runs only when a provider is configured and enabled. Docker container stop and host shutdown are stored but not executed.",
+		},
+	}
+}
+
+func (n NotificationsConfig) Public() NotificationsView {
+	return NotificationsView{
+		Provider:          n.Provider,
+		Enabled:           n.Enabled,
+		DryRun:            n.DryRun,
+		WebhookURL:        "",
+		ChatID:            "",
+		WebhookConfigured: strings.TrimSpace(n.WebhookURL) != "",
+		ChatIDConfigured:  strings.TrimSpace(n.ChatID) != "",
+	}
+}
+
+func (n NotificationsConfig) ExecutionState() string {
+	if !n.ProviderConfigured() {
+		return ExecutionUnconfigured
+	}
+	if !n.Enabled {
+		return ExecutionDisabled
+	}
+	if n.DryRun {
+		return ExecutionDryRun
+	}
+	return ExecutionReady
+}
+
+// ProviderConfigured is true when a real provider has the fields needed to send
+// a message. A webhook URL with provider "none" is not enough.
+func (n NotificationsConfig) ProviderConfigured() bool {
+	url := strings.TrimSpace(n.WebhookURL)
+	if url == "" || validateHTTPURL(url) != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(n.Provider)) {
+	case NotifyProviderNtfy, NotifyProviderDiscord, NotifyProviderWebhook:
+		return true
+	case NotifyProviderTelegram:
+		return strings.TrimSpace(n.ChatID) != ""
+	default:
+		return false
 	}
 }
 
@@ -96,9 +162,9 @@ func (n *NotificationsConfig) normalize() error {
 		n.Provider = NotifyProviderNone
 	}
 	switch n.Provider {
-	case NotifyProviderNone, NotifyProviderTelegram, NotifyProviderDiscord, NotifyProviderWebhook:
+	case NotifyProviderNone, NotifyProviderNtfy, NotifyProviderTelegram, NotifyProviderDiscord, NotifyProviderWebhook:
 	default:
-		return invalidConfig("unknown notification provider (want none, telegram, discord, or webhook)")
+		return invalidConfig("unknown notification provider (want none, ntfy, telegram, discord, or webhook)")
 	}
 
 	n.WebhookURL = strings.TrimSpace(n.WebhookURL)
@@ -171,6 +237,7 @@ func validateHTTPURL(raw string) error {
 type NotificationsPatch struct {
 	Provider   *string `json:"provider"`
 	Enabled    *bool   `json:"enabled"`
+	DryRun     *bool   `json:"dry_run"`
 	WebhookURL *string `json:"webhook_url"`
 	ChatID     *string `json:"chat_id"`
 }
@@ -194,11 +261,18 @@ func (n NotificationsConfig) Apply(p NotificationsPatch) (NotificationsConfig, e
 	if p.Enabled != nil {
 		out.Enabled = *p.Enabled
 	}
+	if p.DryRun != nil {
+		out.DryRun = *p.DryRun
+	}
 	if p.WebhookURL != nil {
-		out.WebhookURL = *p.WebhookURL
+		if v := strings.TrimSpace(*p.WebhookURL); v != "" && v != RedactedSecret {
+			out.WebhookURL = v
+		}
 	}
 	if p.ChatID != nil {
-		out.ChatID = *p.ChatID
+		if v := strings.TrimSpace(*p.ChatID); v != "" && v != RedactedSecret {
+			out.ChatID = v
+		}
 	}
 	if err := out.normalize(); err != nil {
 		return NotificationsConfig{}, err

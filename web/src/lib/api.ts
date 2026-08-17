@@ -62,7 +62,57 @@ export function putConfig(body: {
   shutdown: ShutdownConfig;
   docker: DockerConfig;
 }): Promise<AppConfig> {
-  return sendJSON<AppConfig>('PUT', '/api/v1/config', body);
+  return sendJSON<AppConfig>('PUT', '/api/v1/config', {
+    notifications: notificationPayload(body.notifications),
+    shutdown: body.shutdown,
+    docker: body.docker,
+  });
+}
+
+function notificationPayload(n: NotificationsConfig): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    provider: n.provider,
+    enabled: n.enabled,
+    dry_run: Boolean(n.dry_run),
+  };
+  if (n.webhook_url) {
+    body.webhook_url = n.webhook_url;
+  }
+  if (n.chat_id) {
+    body.chat_id = n.chat_id;
+  }
+  return body;
+}
+
+export type TestNotificationResult = {
+  ok: boolean;
+  provider?: string;
+  dry_run?: boolean;
+  error?: string;
+};
+
+export async function testNotification(): Promise<TestNotificationResult> {
+  const res = await fetch('/api/v1/actions/test-notification', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+  });
+  const body = (await res.json().catch(() => ({}))) as TestNotificationResult & {
+    error?: string;
+    detail?: string;
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      provider: body.provider,
+      dry_run: body.dry_run,
+      error: body.error || body.detail || `test notification failed: ${res.status}`,
+    };
+  }
+  return body;
 }
 
 export function postNotifications(body: NotificationsConfig): Promise<AppConfig> {

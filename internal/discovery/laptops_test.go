@@ -264,7 +264,7 @@ tp-smapi   = inactive (unsupported hardware)
 				t.Fatal("mock laptops expose a readable mains online attribute")
 			}
 			if report.Features.Notifications || report.Features.GracefulShutdown {
-				t.Fatal("notifications and graceful shutdown are not implemented")
+				t.Fatal("hardware discovery must not enable notifications or graceful shutdown")
 			}
 			if report.NamingConvention != tc.wantNaming {
 				t.Fatalf("naming %q, want %q", report.NamingConvention, tc.wantNaming)

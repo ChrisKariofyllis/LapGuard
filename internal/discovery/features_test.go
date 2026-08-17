@@ -65,6 +65,23 @@ func TestPowerFeatureSemanticsNeither(t *testing.T) {
 	}
 }
 
+func TestNotificationsCapabilityRequiresProvider(t *testing.T) {
+	report := CapabilityReport{}
+	feat := mustFeature(t, featureStatuses(report), "notifications")
+	if feat.Enabled {
+		t.Fatal("notifications should be disabled without a provider")
+	}
+	if feat.WhyNot == "" {
+		t.Fatal("expected why_not")
+	}
+
+	report.Features.Notifications = true
+	feat = mustFeature(t, featureStatuses(report), "notifications")
+	if !feat.Enabled || feat.WhyNot != "" {
+		t.Fatalf("%+v", feat)
+	}
+}
+
 func mustFeature(t *testing.T, feats []FeatureStatus, key string) FeatureStatus {
 	t.Helper()
 	for _, f := range feats {

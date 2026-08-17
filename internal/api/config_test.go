@@ -40,6 +40,9 @@ func TestGetConfig(t *testing.T) {
 	if body.Execution.Shutdown != config.ExecutionStoredOnly {
 		t.Fatalf("execution %+v", body.Execution)
 	}
+	if body.Execution.Notifications != config.ExecutionUnconfigured {
+		t.Fatalf("notifications execution %+v", body.Execution)
+	}
 }
 
 func TestPutConfig(t *testing.T) {
@@ -65,8 +68,17 @@ func TestPutConfig(t *testing.T) {
 	if !body.Docker.StopEnabled || body.Docker.TimeoutSeconds != 45 {
 		t.Fatalf("docker %+v", body.Docker)
 	}
-	if body.Execution.Notifications != config.ExecutionStoredOnly {
-		t.Fatal("PUT must not claim execution is implemented")
+	if body.Execution.Shutdown != config.ExecutionStoredOnly {
+		t.Fatal("PUT must not claim shutdown is implemented")
+	}
+	if body.Execution.Notifications != config.ExecutionDisabled {
+		t.Fatalf("configured but disabled notifications: %+v", body.Execution)
+	}
+	if body.Notifications.WebhookURL != "" || body.Notifications.ChatID != "" {
+		t.Fatalf("API must not return secrets: %+v", body.Notifications)
+	}
+	if !body.Notifications.WebhookConfigured || !body.Notifications.ChatIDConfigured {
+		t.Fatalf("configured flags %+v", body.Notifications)
 	}
 
 	loaded, err := config.LoadFile(srv.currentConfig().ConfigPath)
@@ -144,8 +156,14 @@ func TestPostNotificationsAndShutdown(t *testing.T) {
 	if body.Notifications.Provider != "discord" || body.Shutdown.CriticalThreshold != 12 {
 		t.Fatalf("merged view %+v", body)
 	}
+	if body.Notifications.WebhookURL != "" {
+		t.Fatalf("discord webhook leaked in API: %+v", body.Notifications)
+	}
 	if body.Execution.Shutdown != config.ExecutionStoredOnly {
 		t.Fatal("POST shutdown must not execute")
+	}
+	if body.Execution.Notifications != config.ExecutionReady {
+		t.Fatalf("discord enabled should be ready: %+v", body.Execution)
 	}
 }
 
@@ -230,6 +248,9 @@ func TestConfigSecretsNotLogged(t *testing.T) {
 		if strings.Contains(out, leak) {
 			t.Fatalf("secret %q appeared in logs:\n%s", leak, out)
 		}
+	}
+	if strings.Contains(rec.Body.String(), secret) || strings.Contains(rec.Body.String(), "whsec_TEST_SECRET_TOKEN_9f3a") {
+		t.Fatalf("secret appeared in API response: %s", rec.Body.String())
 	}
 }
 

@@ -280,6 +280,41 @@ func TestShutdownThresholdValidation(t *testing.T) {
 	}
 }
 
+func TestNotificationApplyKeepsSecretsOnBlank(t *testing.T) {
+	n := NotificationsConfig{
+		Provider:   "ntfy",
+		Enabled:    true,
+		WebhookURL: "https://ntfy.example.invalid/lapguard",
+	}
+	empty := ""
+	redacted := RedactedSecret
+	out, err := n.Apply(NotificationsPatch{WebhookURL: &empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WebhookURL != n.WebhookURL {
+		t.Fatalf("blank webhook should keep stored URL, got %q", out.WebhookURL)
+	}
+	out, err = n.Apply(NotificationsPatch{WebhookURL: &redacted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.WebhookURL != n.WebhookURL {
+		t.Fatal("redacted marker should keep stored URL")
+	}
+}
+
+func TestNtfyProviderValidates(t *testing.T) {
+	n := NotificationsConfig{Provider: "ntfy", Enabled: true, WebhookURL: "https://ntfy.sh/example"}
+	if err := n.normalize(); err != nil {
+		t.Fatal(err)
+	}
+	n.DryRun = true
+	if err := n.normalize(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNotificationValidationDoesNotEmbedSecrets(t *testing.T) {
 	n := NotificationsConfig{
 		Provider:   "webhook",

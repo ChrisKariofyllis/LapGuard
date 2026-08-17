@@ -107,5 +107,7 @@ func SafeNotifications(n NotificationsConfig) slog.Attr {
 	return slog.Group("notifications",
 		slog.String("provider", n.Provider),
 		slog.Bool("enabled", n.Enabled),
+		slog.Bool("dry_run", n.DryRun),
+		slog.Bool("configured", n.ProviderConfigured()),
 	)
 }

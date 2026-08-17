@@ -4,7 +4,7 @@ Lightweight Linux laptop power manager for machines that stay on as 24/7 home se
 
 The API binds to `127.0.0.1:8585`. Remote access is intended to go through Tailscale later, not a public bind.
 
-**Milestone 3B is complete:** AC power-loss watching and a local outage event log. Notification delivery, Docker stop, and host shutdown are still **not executed**.
+**Milestone 3C is complete:** notification delivery (ntfy, Telegram, Discord) is implemented and **disabled by default**. Docker stop and host shutdown are still **not executed**.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for tested laptops and charge-threshold behaviour.
 
@@ -20,16 +20,64 @@ The watcher records a startup baseline **without** emitting an event. A new stat
 
 Events are stored in SQLite at `~/.config/lapguard/events.db` (mode `0600`). Rows older than 90 days or beyond 1000 events are pruned. The log never stores secrets or battery serial numbers. There is no SSE endpoint in this milestone.
 
-This milestone does **not** run `systemctl poweroff`, `shutdown`, `docker stop`, or notification HTTP calls.
+This milestone does **not** run `systemctl poweroff`, `shutdown`, or `docker stop`. Notification HTTP calls are implemented in Milestone 3C and remain off until `notifications.enabled` is true.
+
+## Milestone 3C — Notification delivery
+
+LapGuard can send `AC_DISCONNECTED`, `AC_CONNECTED`, `BATTERY_WARNING`, and `BATTERY_CRITICAL` through ntfy, Telegram, or a Discord webhook. Delivery stays **disabled** until `notifications.enabled` is true and a real provider is configured. A webhook URL with `provider` `none` is not enough.
+
+Events are rate-limited (5 minutes per type) so AC flapping cannot spam a channel. Failed deliveries retry up to 3 times with exponential backoff and a 5s HTTP timeout. `notifications.dry_run=true` logs only the event type and provider — it never makes an HTTP request.
+
+Webhook URLs, bot tokens, chat IDs, and passwords are stored in `config.json` (mode `0600`) and are **never** returned by the API or written to logs. After save, the UI shows that a secret is stored without displaying it.
+
+`POST /api/v1/actions/test-notification` sends a test message when notifications are enabled and a provider is configured. The response is `ok` / error only — no URL or token.
+
+Battery warning/critical use the configured shutdown percents and fire only while the pack is discharging. Host shutdown is still not executed.
+
+### Provider setup (placeholders only)
+
+**ntfy** — create a topic and use its URL as `webhook_url`:
+
+```json
+{
+  "provider": "ntfy",
+  "enabled": true,
+  "dry_run": true,
+  "webhook_url": "https://ntfy.sh/your-topic-name"
+}
+```
+
+**Telegram** — `webhook_url` is the Bot API `sendMessage` endpoint; `chat_id` is required:
+
+```json
+{
+  "provider": "telegram",
+  "enabled": true,
+  "webhook_url": "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/sendMessage",
+  "chat_id": "<YOUR_CHAT_ID>"
+}
+```
+
+**Discord** — paste a channel webhook URL:
+
+```json
+{
+  "provider": "discord",
+  "enabled": true,
+  "webhook_url": "https://discord.com/api/webhooks/<id>/<token>"
+}
+```
+
+Turn `dry_run` off after a successful test. The estimate of remaining battery time and the outage log are unchanged.
 
 ## Milestone 3A — Secure configuration API
 
 User-managed settings live alongside the existing process config (listen, provider, sysfs root, threshold method):
 
-| Section | Fields | Runtime effect in 3A |
+| Section | Fields | Runtime effect |
 | --- | --- | --- |
-| `notifications` | `provider`, `enabled`, `webhook_url`, `chat_id` | Persisted only |
-| `shutdown` | `enabled`, `warning_threshold`, `critical_threshold` | Persisted only |
+| `notifications` | `provider`, `enabled`, `dry_run`, `webhook_url`, `chat_id` | Delivery when enabled (3C) |
+| `shutdown` | `enabled`, `warning_threshold`, `critical_threshold` | Percents used for battery alerts; shutdown not executed |
 | `docker` | `stop_enabled`, `timeout_seconds` | Persisted only |
 
 Persistence rules:
@@ -81,6 +129,7 @@ Threshold **writes** are wired in `internal/thresholds` (sysfs `charge_control_*
 | POST | `/api/v1/config/shutdown` | Merge and persist the shutdown section |
 | GET | `/api/v1/power` | Current power source (`AC` / `BATTERY` / `UNKNOWN`), adapters, watcher status |
 | GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
+| POST | `/api/v1/actions/test-notification` | Send a test message (requires enabled provider) |
 
 ### `GET /api/v1/config`
 
@@ -91,8 +140,11 @@ Returns the in-memory settings (defaults if the file has no user sections yet):
   "notifications": {
     "provider": "none",
     "enabled": false,
+    "dry_run": false,
     "webhook_url": "",
-    "chat_id": ""
+    "chat_id": "",
+    "webhook_configured": false,
+    "chat_id_configured": false
   },
   "shutdown": {
     "enabled": false,
@@ -104,14 +156,14 @@ Returns the in-memory settings (defaults if the file has no user sections yet):
     "timeout_seconds": 30
   },
   "execution": {
-    "notifications": "stored_only",
+    "notifications": "unconfigured",
     "shutdown": "stored_only",
     "docker": "stored_only"
   }
 }
 ```
 
-`notifications.provider` is one of `none`, `telegram`, `discord`, `webhook`.
+`notifications.provider` is one of `none`, `ntfy`, `telegram`, `discord`, `webhook`. Secrets in `webhook_url` and `chat_id` are omitted from responses; use `webhook_configured` / `chat_id_configured`. `execution.notifications` is `unconfigured`, `disabled`, `dry_run`, or `ready`.
 
 ### `PUT /api/v1/config`
 
@@ -122,8 +174,9 @@ JSON object. Omitted sections are left unchanged. Round-tripping `execution` / `
   "notifications": {
     "provider": "telegram",
     "enabled": false,
-    "webhook_url": "https://api.telegram.org/bot…/sendMessage",
-    "chat_id": "123"
+    "dry_run": true,
+    "webhook_url": "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/sendMessage",
+    "chat_id": "<YOUR_CHAT_ID>"
   },
   "shutdown": {
     "enabled": true,
@@ -146,7 +199,7 @@ Errors:
 | Unknown notification provider, missing webhook when enabled | 400 | `invalid config` |
 | Persist failure | 500 | `failed to persist config` |
 
-`POST /api/v1/config/notifications` and `POST /api/v1/config/shutdown` take the section object (not wrapped) and use the same validation. They do **not** send a message or power off the host.
+`POST /api/v1/config/notifications` and `POST /api/v1/config/shutdown` take the section object (not wrapped) and use the same validation. Shutdown POST still does not power off the host.
 
 ### `GET /api/v1/power`
 
@@ -160,7 +213,7 @@ Query parameters: `limit` (default 50) and optional `type` (`AC_CONNECTED`, `AC_
 
 The dashboard Capabilities panel lists each feature as enabled or not supported, with the detection method and fallback reason. Tools and kernel modules are shown as chips. **Re-scan** calls `/api/v1/discover` and refreshes the panel.
 
-The Configuration panel edits notifications, shutdown thresholds, and Docker drain settings. **Save settings** calls `PUT /api/v1/config`. **Send test notification**, **Shut down now**, and **Stop Docker containers** stay disabled until a later milestone implements execution.
+The Configuration panel edits notifications, shutdown thresholds, and Docker drain settings. **Save settings** calls `PUT /api/v1/config`. **Send test notification** calls `POST /api/v1/actions/test-notification` when notifications are enabled. **Shut down now** and **Stop Docker containers** stay disabled. Webhook URLs and chat IDs are not shown after save.
 
 The Power source panel shows AC / battery / unknown, discovered mains adapters, and the recent outage log from `GET /api/v1/events`. The startup baseline is not listed as an event.
 
@@ -173,8 +226,10 @@ internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage event log
 internal/thresholds/         # sysfs writes or tlp setcharge (no HTTP yet)
+internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
 internal/api/handlers.go
 internal/api/config.go       # GET/PUT config, POST notifications/shutdown
+internal/api/notify.go       # POST /actions/test-notification
 internal/api/power.go        # GET /power and GET /events
 internal/config/             # flags + atomic ~/.config/lapguard/config.json
 testdata/sysfs/BAT0/
@@ -215,4 +270,4 @@ First start writes `~/.config/lapguard/config.json` (listen, provider, `threshol
 - Config file mode is `0600`; webhook URLs and tokens stay out of logs.
 - Outage events live in `~/.config/lapguard/events.db` (mode `0600`). Older than 90 days or beyond 1000 rows are pruned.
 - Build the UI with `cd web && npm run build`, then `go run ./cmd/lapguard` serves `web/dist`.
-- Notification delivery, Docker drain, host shutdown, and authentication remain out of scope for execution. Discovery still reports whether Docker is present; the config API only stores the intended policy.
+- Notification delivery is off by default. Docker drain, host shutdown, and authentication remain out of scope for execution. Discovery still reports whether Docker is present; the config API only stores the intended Docker/shutdown policy.

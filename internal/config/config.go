@@ -15,7 +15,7 @@ import (
 
 const (
 	AppName = "lapguard"
-	Version = "0.3.0"
+	Version = "0.5.0-alpha"
 
 	DefaultListen          = "127.0.0.1:8585"
 	DefaultProvider        = "auto"
