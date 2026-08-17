@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import ConfigPanel from './lib/ConfigPanel.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import {
     abs,
@@ -391,5 +392,7 @@
         </ul>
       {/if}
     </section>
+
+    <ConfigPanel />
   </div>
 </div>

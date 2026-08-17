@@ -4,7 +4,31 @@ Lightweight Linux laptop power manager for machines that stay on as 24/7 home se
 
 The API binds to `127.0.0.1:8585`. Remote access is intended to go through Tailscale later, not a public bind.
 
-**Milestone 2 is complete:** hardware auto-discovery and a capabilities UI. LapGuard probes the machine at runtime and enables only what it actually supports. See [COMPATIBILITY.md](COMPATIBILITY.md) for tested laptops and charge-threshold behaviour.
+**Milestone 3A is complete:** a secure configuration API and UI. Settings are validated, written atomically to `~/.config/lapguard/config.json` with mode `0600`, and never leak notification secrets into logs. Notification delivery, Docker stop, and host shutdown are **stored only** — they are not executed yet.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for tested laptops and charge-threshold behaviour.
+
+## Milestone 3A — Secure configuration API
+
+User-managed settings live alongside the existing process config (listen, provider, sysfs root, threshold method):
+
+| Section | Fields | Runtime effect in 3A |
+| --- | --- | --- |
+| `notifications` | `provider`, `enabled`, `webhook_url`, `chat_id` | Persisted only |
+| `shutdown` | `enabled`, `warning_threshold`, `critical_threshold` | Persisted only |
+| `docker` | `stop_enabled`, `timeout_seconds` | Persisted only |
+
+Persistence rules:
+
+- Path: `~/.config/lapguard/config.json` (or `-config`)
+- Parent directory is created if missing
+- Writes use a temporary file in the same directory, then `rename`
+- File mode is `0600`
+- Incoming JSON is validated; malformed bodies return HTTP 400
+- Warning and critical percents must be `0..100`, and **critical must be lower than warning**
+- Notification secrets, tokens, passwords, and webhook URLs are never written to logs
+
+CLI flags still overlay the file for process settings (`listen`, `provider`, `sysfs-root`, …). The HTTP API updates the three user sections without restarting the process.
 
 ## Milestone 2 — Hardware Auto-Discovery & Capabilities
 
@@ -36,10 +60,82 @@ Threshold **writes** are wired in `internal/thresholds` (sysfs `charge_control_*
 | GET | `/api/v1/telemetry` | Battery snapshot, power (W), health (%) |
 | GET | `/api/v1/discover` | Re-run detection; full `CapabilityReport` |
 | GET | `/api/v1/capabilities` | UI payload: per-feature `detection_method`, `recommendation`, `why_not` |
+| GET | `/api/v1/config` | Current notifications, shutdown, and Docker settings |
+| PUT | `/api/v1/config` | Merge and persist those settings |
+| POST | `/api/v1/config/notifications` | Merge and persist the notifications section |
+| POST | `/api/v1/config/shutdown` | Merge and persist the shutdown section |
+
+### `GET /api/v1/config`
+
+Returns the in-memory settings (defaults if the file has no user sections yet):
+
+```json
+{
+  "notifications": {
+    "provider": "none",
+    "enabled": false,
+    "webhook_url": "",
+    "chat_id": ""
+  },
+  "shutdown": {
+    "enabled": false,
+    "warning_threshold": 20,
+    "critical_threshold": 10
+  },
+  "docker": {
+    "stop_enabled": false,
+    "timeout_seconds": 30
+  },
+  "execution": {
+    "notifications": "stored_only",
+    "shutdown": "stored_only",
+    "docker": "stored_only"
+  }
+}
+```
+
+`notifications.provider` is one of `none`, `telegram`, `discord`, `webhook`.
+
+### `PUT /api/v1/config`
+
+JSON object. Omitted sections are left unchanged. Round-tripping `execution` / `notes` is ignored.
+
+```json
+{
+  "notifications": {
+    "provider": "telegram",
+    "enabled": false,
+    "webhook_url": "https://api.telegram.org/bot…/sendMessage",
+    "chat_id": "123"
+  },
+  "shutdown": {
+    "enabled": true,
+    "warning_threshold": 25,
+    "critical_threshold": 8
+  },
+  "docker": {
+    "stop_enabled": true,
+    "timeout_seconds": 45
+  }
+}
+```
+
+Errors:
+
+| Condition | Status | `error` |
+| --- | --- | --- |
+| Empty body, non-object, or invalid JSON | 400 | `malformed JSON` |
+| Percent outside 0–100, or critical ≥ warning | 400 | `invalid config` |
+| Unknown notification provider, missing webhook when enabled | 400 | `invalid config` |
+| Persist failure | 500 | `failed to persist config` |
+
+`POST /api/v1/config/notifications` and `POST /api/v1/config/shutdown` take the section object (not wrapped) and use the same validation. They do **not** send a message or power off the host.
 
 ## UI
 
 The dashboard Capabilities panel lists each feature as enabled or not supported, with the detection method and fallback reason. Tools and kernel modules are shown as chips. **Re-scan** calls `/api/v1/discover` and refreshes the panel.
+
+The Configuration panel edits notifications, shutdown thresholds, and Docker drain settings. **Save settings** calls `PUT /api/v1/config`. **Send test notification**, **Shut down now**, and **Stop Docker containers** stay disabled until a later milestone implements execution.
 
 ## Layout
 
@@ -49,7 +145,8 @@ internal/discovery/          # sysfs / modules / tools / threshold detection
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/thresholds/         # sysfs writes or tlp setcharge (no HTTP yet)
 internal/api/handlers.go
-internal/config/             # flags + ~/.config/lapguard/config.json
+internal/api/config.go       # GET/PUT config, POST notifications/shutdown
+internal/config/             # flags + atomic ~/.config/lapguard/config.json
 testdata/sysfs/BAT0/
 web/
 ```
@@ -79,11 +176,12 @@ go run ./cmd/lapguard -provider sysfs -sysfs-root testdata/sysfs
 
 On the Lifebook, the default `auto` provider reads `/sys/class/power_supply` as an unprivileged user.
 
-First start writes `~/.config/lapguard/config.json` (listen, provider, `threshold_method: auto`). Flags override the file. Features are re-detected every launch; `threshold_method` stays `auto` unless you pin `sysfs`, `tlp`, or `none`.
+First start writes `~/.config/lapguard/config.json` (listen, provider, `threshold_method: auto`, plus notifications/shutdown/docker defaults). Flags override the file. Features are re-detected every launch; `threshold_method` stays `auto` unless you pin `sysfs`, `tlp`, or `none`.
 
 ## Production notes
 
 - Default bind is loopback only.
 - Do not run the process as root during development.
+- Config file mode is `0600`; webhook URLs and tokens stay out of logs.
 - Build the UI with `cd web && npm run build`, then `go run ./cmd/lapguard` serves `web/dist`.
-- Shutdown, Docker drain, notifications and authentication remain out of scope; discovery still reports whether Docker is present.
+- Notification delivery, Docker drain, host shutdown, and authentication remain out of scope for execution. Discovery still reports whether Docker is present; the config API only stores the intended policy.

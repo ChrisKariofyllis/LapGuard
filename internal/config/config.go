@@ -14,25 +14,34 @@ import (
 
 const (
 	AppName = "lapguard"
-	Version = "0.2.0"
+	Version = "0.3.0"
 
 	DefaultListen          = "127.0.0.1:8585"
 	DefaultProvider        = "auto"
 	DefaultSysfsRoot       = "/sys/class/power_supply"
 	DefaultWebDir          = "web/dist"
 	DefaultThresholdMethod = "auto"
+
+	DefaultNotifyProvider    = "none"
+	DefaultWarningThreshold  = 20
+	DefaultCriticalThreshold = 10
+	DefaultDockerTimeoutSecs = 30
+	ConfigFileMode           = os.FileMode(0o600)
 )
 
 // Config holds process-wide settings. Flags overlay a JSON file when present.
 type Config struct {
-	Listen          string `json:"listen"`
-	Provider        string `json:"provider"`
-	SysfsRoot       string `json:"sysfs_root"`
-	BatteryName     string `json:"battery"`
-	WebDir          string `json:"web_dir"`
-	LogJSON         bool   `json:"log_json"`
-	ThresholdMethod string `json:"threshold_method"`
-	ConfigPath      string `json:"-"`
+	Listen          string              `json:"listen"`
+	Provider        string              `json:"provider"`
+	SysfsRoot       string              `json:"sysfs_root"`
+	BatteryName     string              `json:"battery"`
+	WebDir          string              `json:"web_dir"`
+	LogJSON         bool                `json:"log_json"`
+	ThresholdMethod string              `json:"threshold_method"`
+	Notifications   NotificationsConfig `json:"notifications"`
+	Shutdown        ShutdownConfig      `json:"shutdown"`
+	Docker          DockerConfig        `json:"docker"`
+	ConfigPath      string              `json:"-"`
 
 	setFlags       map[string]bool `json:"-"`
 	writeIfMissing bool            `json:"-"`
@@ -45,6 +54,9 @@ func defaults() Config {
 		SysfsRoot:       DefaultSysfsRoot,
 		WebDir:          DefaultWebDir,
 		ThresholdMethod: DefaultThresholdMethod,
+		Notifications:   DefaultNotifications(),
+		Shutdown:        DefaultShutdown(),
+		Docker:          DefaultDocker(),
 		setFlags:        map[string]bool{},
 	}
 }
@@ -167,6 +179,7 @@ func LoadFile(path string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.ConfigPath = path
+	_ = os.Chmod(path, ConfigFileMode)
 	return cfg, nil
 }
 
@@ -174,10 +187,6 @@ func (c Config) Save(path string) error {
 	if path == "" {
 		return fmt.Errorf("config path is empty")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	c.ConfigPath = ""
 	raw, err := json.MarshalIndent(persistDTO{
 		Listen:          c.Listen,
 		Provider:        c.Provider,
@@ -186,22 +195,32 @@ func (c Config) Save(path string) error {
 		WebDir:          c.WebDir,
 		LogJSON:         c.LogJSON,
 		ThresholdMethod: c.ThresholdMethod,
+		Notifications:   c.Notifications,
+		Shutdown:        c.Shutdown,
+		Docker:          c.Docker,
 	}, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
-	return os.WriteFile(path, raw, 0o644)
+	return atomicWriteFile(path, raw, ConfigFileMode)
 }
 
 type persistDTO struct {
-	Listen          string `json:"listen"`
-	Provider        string `json:"provider"`
-	SysfsRoot       string `json:"sysfs_root"`
-	BatteryName     string `json:"battery"`
-	WebDir          string `json:"web_dir"`
-	LogJSON         bool   `json:"log_json"`
-	ThresholdMethod string `json:"threshold_method"`
+	Listen          string              `json:"listen"`
+	Provider        string              `json:"provider"`
+	SysfsRoot       string              `json:"sysfs_root"`
+	BatteryName     string              `json:"battery"`
+	WebDir          string              `json:"web_dir"`
+	LogJSON         bool                `json:"log_json"`
+	ThresholdMethod string              `json:"threshold_method"`
+	Notifications   NotificationsConfig `json:"notifications"`
+	Shutdown        ShutdownConfig      `json:"shutdown"`
+	Docker          DockerConfig        `json:"docker"`
+}
+
+func (c *Config) Normalize() error {
+	return c.normalize()
 }
 
 func (c *Config) normalize() error {
@@ -223,6 +242,15 @@ func (c *Config) normalize() error {
 	case "auto", "sysfs", "tlp", "none":
 	default:
 		return fmt.Errorf("unknown threshold-method %q (want auto, sysfs, tlp, or none)", c.ThresholdMethod)
+	}
+	if err := c.Notifications.normalize(); err != nil {
+		return err
+	}
+	if err := c.Shutdown.normalize(); err != nil {
+		return err
+	}
+	if err := c.Docker.normalize(); err != nil {
+		return err
 	}
 	return nil
 }

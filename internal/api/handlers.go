@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"lapguard/internal/battery"
@@ -16,15 +18,18 @@ import (
 
 type Server struct {
 	provider battery.Provider
-	cfg      config.Config
 	log      *slog.Logger
 	disc     discovery.Reporter
+
+	mu  sync.RWMutex
+	cfg config.Config
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
+	log = slog.New(config.NewRedactingHandler(log.Handler()))
 	if disc == nil {
 		disc = discovery.Static{}
 	}
@@ -41,9 +46,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/telemetry", s.handleTelemetry)
 	mux.HandleFunc("GET /api/v1/capabilities", s.handleCapabilities)
 	mux.HandleFunc("GET /api/v1/discover", s.handleDiscover)
+	mux.HandleFunc("GET /api/v1/config", s.handleGetConfig)
+	mux.HandleFunc("PUT /api/v1/config", s.handlePutConfig)
+	mux.HandleFunc("POST /api/v1/config/notifications", s.handlePostNotifications)
+	mux.HandleFunc("POST /api/v1/config/shutdown", s.handlePostShutdown)
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
+}
+
+func (s *Server) currentConfig() config.Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg
 }
 
 type capabilitiesResponse struct {
@@ -84,7 +99,8 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	report := s.applyConfig(s.disc.Last())
+	cfg := s.currentConfig()
+	report := s.applyConfig(s.disc.Last(), cfg)
 	fields := probe.AvailableFields
 	if len(fields) == 0 {
 		fields = report.AvailableFields
@@ -106,10 +122,10 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		App:              config.AppName,
 		Version:          config.Version,
 		Provider:         s.provider.Kind(),
-		Listen:           s.cfg.Listen,
+		Listen:           cfg.Listen,
 		BatteryPresent:   present,
 		BatteryName:      name,
-		SysfsRoot:        firstNonEmpty(probe.SysfsRoot, s.cfg.SysfsRoot),
+		SysfsRoot:        firstNonEmpty(probe.SysfsRoot, cfg.SysfsRoot),
 		Hostname:         report.Hostname,
 		OS:               report.OS,
 		Kernel:           report.Kernel,
@@ -135,15 +151,15 @@ func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, "failed to run hardware discovery", err)
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.applyConfig(report))
+	s.writeJSON(w, http.StatusOK, s.applyConfig(report, s.currentConfig()))
 }
 
-func (s *Server) applyConfig(report discovery.CapabilityReport) discovery.CapabilityReport {
+func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Config) discovery.CapabilityReport {
 	detected := report.Features.ChargeThresholds
 	if detected == "" {
 		detected = discovery.MethodNone
 	}
-	method, warn := config.ResolveThresholdMethod(s.cfg.ThresholdMethod, detected)
+	method, warn := config.ResolveThresholdMethod(cfg.ThresholdMethod, detected)
 	report.Features.ChargeThresholds = method
 	report.Thresholds.Method = method
 	if report.Thresholds.DetectionMethod == "" {
@@ -168,7 +184,7 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) staticHandler() http.Handler {
-	webDir := strings.TrimSpace(s.cfg.WebDir)
+	webDir := strings.TrimSpace(s.currentConfig().WebDir)
 	if webDir == "" {
 		return http.HandlerFunc(s.handleAPIOnlyRoot)
 	}
@@ -203,9 +219,12 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 		"version": config.Version,
 		"message": "frontend not built; use the Vite dev server or run npm run build in web/",
 		"api": map[string]string{
-			"telemetry":    "/api/v1/telemetry",
-			"capabilities": "/api/v1/capabilities",
-			"discover":     "/api/v1/discover",
+			"telemetry":            "/api/v1/telemetry",
+			"capabilities":         "/api/v1/capabilities",
+			"discover":             "/api/v1/discover",
+			"config":               "/api/v1/config",
+			"config_notifications": "/api/v1/config/notifications",
+			"config_shutdown":      "/api/v1/config/shutdown",
 		},
 	})
 }
@@ -222,11 +241,27 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func (s *Server) writeError(w http.ResponseWriter, status int, message string, err error) {
-	s.log.Error(message, "err", err, "status", status)
-	s.writeJSON(w, status, map[string]string{
-		"error":  message,
-		"detail": err.Error(),
-	})
+	if status >= 500 {
+		s.log.Error(message, "err", err, "status", status)
+	} else {
+		s.log.Warn(message, "status", status)
+	}
+	detail := ""
+	if err != nil {
+		detail = err.Error()
+		if errors.Is(err, config.ErrMalformedJSON) {
+			detail = "request body is not valid JSON"
+			message = "malformed JSON"
+		} else if errors.Is(err, config.ErrInvalidConfig) {
+			message = "invalid config"
+			detail = strings.TrimPrefix(err.Error(), config.ErrInvalidConfig.Error()+": ")
+		}
+	}
+	body := map[string]string{"error": message}
+	if detail != "" {
+		body["detail"] = detail
+	}
+	s.writeJSON(w, status, body)
 }
 
 func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
@@ -257,7 +292,7 @@ func setCORS(w http.ResponseWriter, r *http.Request) {
 	case "http://127.0.0.1:5173", "http://localhost:5173":
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type")
 	}
 }

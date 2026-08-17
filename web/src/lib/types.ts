@@ -98,6 +98,38 @@ export type Capabilities = {
   battery: BatteryIdentity;
 };
 
+export type NotificationProvider = 'none' | 'telegram' | 'discord' | 'webhook';
+
+export type NotificationsConfig = {
+  provider: NotificationProvider;
+  enabled: boolean;
+  webhook_url: string;
+  chat_id: string;
+};
+
+export type ShutdownConfig = {
+  enabled: boolean;
+  warning_threshold: number;
+  critical_threshold: number;
+};
+
+export type DockerConfig = {
+  stop_enabled: boolean;
+  timeout_seconds: number;
+};
+
+export type AppConfig = {
+  notifications: NotificationsConfig;
+  shutdown: ShutdownConfig;
+  docker: DockerConfig;
+  execution: {
+    notifications: string;
+    shutdown: string;
+    docker: string;
+  };
+  notes?: string[];
+};
+
 export type DiscoverReport = {
   timestamp: string;
   hostname: string;
