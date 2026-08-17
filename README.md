@@ -38,7 +38,7 @@ On startup (and on `GET /api/v1/discover`) LapGuard scans:
 - `/proc/modules` — vendor modules (`thinkpad_acpi`, `fujitsu_laptop`, `asus_wmi`, …)
 - Userspace tools — TLP (plus version / `tlp-stat` threshold support), UPower, ACPI, and related helpers
 
-Charge-threshold method is chosen in order: **sysfs → tlp → none**. Unsupported hardware is not an error; the report includes `why_not`. The Fujitsu Lifebook is the reference edge case: `fujitsu_laptop` may load and TLP may be installed, yet charge control never registers, so the method is `none`.
+Charge-threshold method is chosen in order: **sysfs → tlp → none**. Unsupported hardware is not an error; the report includes `why_not`. The Fujitsu Lifebook A3510 is the reference edge case: **BAT1** uses `charge_*` (no `power_now` or `temp`); power is derived from `current_now × voltage_now`; `fujitsu_laptop` may load and TLP may be installed, yet charge control never registers, so the method is `none`.
 
 Telemetry accepts both sysfs naming conventions (`energy_*` and `charge_*`). A missing file is omitted, not a failure.
 
@@ -153,7 +153,7 @@ web/
 
 ## Development (no root)
 
-The development box is an HP ProDesk without a battery. The production box is a Fujitsu Lifebook with a real pack. `auto` tries sysfs and falls back to the mock provider when no battery is present. Discovery always runs against the real (or `-sysfs-root`) tree.
+The development box is an HP ProDesk without a battery. The production box is a Fujitsu Lifebook A3510 with a real `charge_*` pack on BAT1. `auto` tries sysfs and falls back to the mock provider when no battery is present. Discovery always runs against the real (or `-sysfs-root`) tree.
 
 ```bash
 export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"

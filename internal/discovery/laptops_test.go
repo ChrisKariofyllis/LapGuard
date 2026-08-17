@@ -112,22 +112,24 @@ NATACPI    = active (start = 50, stop = 80)
 		{
 			name: "fujitsu",
 			setup: func(t *testing.T, root string) Options {
+				// Verified Lifebook A3510 shape: charge_* on BAT1, no power_now/temp/charge_control_*.
+				// serial_number is omitted on purpose (do not record real pack serials).
 				writeBattery(t, root, "BAT1", map[string]string{
 					"type":               "Battery",
 					"present":            "1",
 					"status":             "Discharging",
 					"capacity":           "76",
-					"energy_now":         "32000000",
-					"energy_full":        "42100000",
-					"energy_full_design": "50000000",
+					"capacity_level":     "Normal",
+					"charge_now":         "2800000",
+					"charge_full":        "3700000",
+					"charge_full_design": "4400000",
 					"voltage_now":        "11412000",
 					"current_now":        "-1234000",
 					"cycle_count":        "312",
+					"alarm":              "0",
 					"manufacturer":       "Fujitsu",
-					"model_name":         "CP788370-01",
-					"serial_number":      "FUJ-BAT-1",
+					"model_name":         "FixturePack",
 					"technology":         "Li-ion",
-					"temp":               "298",
 				})
 				writeSupply(t, root, "ADP1", map[string]string{"type": "Mains", "online": "1"})
 				writeModules(t, root, "fujitsu_laptop")
@@ -149,7 +151,7 @@ tp-smapi   = inactive (unsupported hardware)
 			wantCycle:       true,
 			wantPowerNow:    false,
 			wantCurrentVolt: true,
-			wantNaming:      "energy",
+			wantNaming:      "charge",
 			whyContains:     "fujitsu_laptop",
 		},
 		{
@@ -270,11 +272,33 @@ tp-smapi   = inactive (unsupported hardware)
 				}
 			}
 			if tc.name == "fujitsu" {
-				if report.Features.Temperature != true {
-					t.Fatal("fujitsu fixture should expose temp")
+				if report.Battery.Name != "BAT1" {
+					t.Fatalf("fujitsu battery name %q, want BAT1", report.Battery.Name)
+				}
+				if report.Features.Temperature {
+					t.Fatal("fujitsu A3510 does not expose sysfs temp")
+				}
+				if !report.Features.AlarmControl {
+					t.Fatal("fujitsu A3510 exposes sysfs alarm")
+				}
+				if report.Features.RawPowerNowSupported || report.Features.PowerNow {
+					t.Fatal("fujitsu A3510 does not expose power_now")
+				}
+				if !report.Features.DerivedPowerSupported {
+					t.Fatal("fujitsu A3510 should derive power from current_now × voltage_now")
 				}
 				if report.PowerCalculation != "current_voltage" {
 					t.Fatalf("fujitsu power method %q, want current_voltage", report.PowerCalculation)
+				}
+				for _, field := range []string{"charge_now", "charge_full", "charge_full_design", "current_now", "voltage_now", "cycle_count", "alarm"} {
+					if !hasField(report.AvailableFields, field) {
+						t.Fatalf("fujitsu available_fields missing %s: %v", field, report.AvailableFields)
+					}
+				}
+				for _, field := range []string{"power_now", "temp", "energy_now", "energy_full", "charge_control_start_threshold", "charge_control_end_threshold"} {
+					if hasField(report.AvailableFields, field) {
+						t.Fatalf("fujitsu available_fields unexpectedly has %s: %v", field, report.AvailableFields)
+					}
 				}
 				foundNote := false
 				for _, n := range report.Notes {
