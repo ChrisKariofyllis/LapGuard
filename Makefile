@@ -5,7 +5,7 @@ export PATH := $(HOME)/.local/go/bin:$(HOME)/.local/node/bin:$(PATH)
 # Release tags: the workflow passes VERSION from the v* tag. Never embed "-dirty".
 override VERSION := $(shell sh ./scripts/version.sh "$(VERSION)")
 LDFLAGS := -s -w -X lapguard/internal/config.Version=$(VERSION)
-GO_BUILD := CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)"
+GO_BUILD := CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$(LDFLAGS)"
 
 .PHONY: test lint build-web web-build stage-web build release-build clean tidy run run-fixture web-install web-dev
 

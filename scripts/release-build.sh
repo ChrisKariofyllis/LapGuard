@@ -22,7 +22,7 @@ export CGO_ENABLED=0
 for arch in amd64 arm64; do
 	out="dist/lapguard_${VERSION}_linux-${arch}"
 	echo "building $out"
-	GOOS=linux GOARCH="$arch" go build -tags embedui -trimpath \
+	GOOS=linux GOARCH="$arch" go build -tags embedui -trimpath -buildvcs=false \
 		-ldflags "-s -w -X lapguard/internal/config.Version=${VERSION}" \
 		-o "$out" ./cmd/lapguard
 done

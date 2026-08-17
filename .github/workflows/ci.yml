@@ -43,14 +43,4 @@ jobs:
         run: make build
 
       - name: Confirm linux/amd64 binary
-        run: |
-          test -s bin/lapguard
-          go version -m bin/lapguard
-          go version -m bin/lapguard | grep -q 'GOOS=linux'
-          go version -m bin/lapguard | grep -q 'GOARCH=amd64'
-          go version -m bin/lapguard | grep -q 'embedui'
-          go version -m bin/lapguard | grep -q 'lapguard/internal/config.Version='
-          if go version -m bin/lapguard | grep -q -- '-dirty'; then
-            echo "embedded version must not include -dirty"
-            exit 1
-          fi
+        run: sh ./scripts/ci-verify-binary.sh
