@@ -56,3 +56,35 @@ export function healthTone(health: number | undefined): StatusTone {
   }
   return 'discharge';
 }
+
+/** Friendly remaining-time label from estimated_runtime_seconds. */
+export function fmtEstimatedRuntime(seconds: number | null | undefined, available?: boolean): string {
+  if (!available || seconds === undefined || seconds === null || !Number.isFinite(seconds) || seconds <= 0) {
+    return '—';
+  }
+  const s = Math.round(seconds);
+  if (s < 3600) {
+    const min = Math.max(1, Math.round(s / 60));
+    return `${min} min`;
+  }
+  if (s < 86400) {
+    const h = Math.floor(s / 3600);
+    const m = Math.round((s % 3600) / 60);
+    if (m === 60) {
+      return `${h + 1}h`;
+    }
+    if (m === 0) {
+      return `${h}h`;
+    }
+    return `${h}h ${m}m`;
+  }
+  const d = Math.floor(s / 86400);
+  const h = Math.round((s % 86400) / 3600);
+  if (h === 24) {
+    return `${d + 1}d`;
+  }
+  if (h === 0) {
+    return `${d}d`;
+  }
+  return `${d}d ${h}h`;
+}

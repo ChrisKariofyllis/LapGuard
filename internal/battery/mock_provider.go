@@ -78,9 +78,6 @@ func (p *MockProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	cycles := 214
 	temp := 31.5
 	status := "Discharging"
-	if current > 0 {
-		status = "Charging"
-	}
 
 	snap.Battery = Battery{
 		Name:               "BAT0",

@@ -2,6 +2,7 @@ package battery
 
 import (
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -106,6 +107,98 @@ func NamingConvention(hasEnergy, hasCharge bool) string {
 	default:
 		return NamingNone
 	}
+}
+
+const (
+	RuntimeReasonDischarging = "available while discharging"
+	RuntimeReasonOnAC        = "not available while connected to AC"
+	RuntimeReasonZeroPower   = "battery discharge power is zero"
+	RuntimeReasonNoPower     = "battery discharge power is unavailable"
+	RuntimeReasonNoEnergy    = "battery energy data is unavailable"
+	RuntimeReasonNoBattery   = "battery is not present"
+)
+
+// RuntimeEstimate is time remaining at the current discharge rate. It is never
+// Infinity/NaN; unavailable cases leave Seconds and Hours nil.
+type RuntimeEstimate struct {
+	Available bool
+	Seconds   *int
+	Hours     *float64
+	Reason    string
+}
+
+// EstimateRuntime computes energy_now_wh / abs(power_w) in seconds. It is only
+// available while the pack is discharging with usable energy and non-zero power.
+func EstimateRuntime(present bool, status string, energyNowWh, powerW *float64) RuntimeEstimate {
+	if !present {
+		return RuntimeEstimate{Reason: RuntimeReasonNoBattery}
+	}
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "charging", "full", "not charging":
+		return RuntimeEstimate{Reason: RuntimeReasonOnAC}
+	case "discharging":
+	default:
+		return RuntimeEstimate{Reason: RuntimeReasonDischarging}
+	}
+	if energyNowWh == nil || *energyNowWh <= 0 || math.IsNaN(*energyNowWh) || math.IsInf(*energyNowWh, 0) {
+		return RuntimeEstimate{Reason: RuntimeReasonNoEnergy}
+	}
+	if powerW == nil || math.IsNaN(*powerW) || math.IsInf(*powerW, 0) {
+		return RuntimeEstimate{Reason: RuntimeReasonNoPower}
+	}
+	watts := math.Abs(*powerW)
+	if watts == 0 {
+		return RuntimeEstimate{Reason: RuntimeReasonZeroPower}
+	}
+	sec := (*energyNowWh / watts) * 3600
+	if math.IsNaN(sec) || math.IsInf(sec, 0) || sec <= 0 {
+		return RuntimeEstimate{Reason: RuntimeReasonNoPower}
+	}
+	rounded := int(math.Round(sec))
+	if rounded < 1 {
+		rounded = 1
+	}
+	hours := float64(rounded) / 3600
+	return RuntimeEstimate{
+		Available: true,
+		Seconds:   &rounded,
+		Hours:     &hours,
+		Reason:    RuntimeReasonDischarging,
+	}
+}
+
+// FormatEstimatedRuntime is the dashboard label for estimated_runtime_seconds.
+func FormatEstimatedRuntime(seconds int, available bool) string {
+	if !available || seconds <= 0 {
+		return "—"
+	}
+	if seconds < 3600 {
+		min := int(math.Round(float64(seconds) / 60))
+		if min < 1 {
+			min = 1
+		}
+		return strconv.Itoa(min) + " min"
+	}
+	if seconds < 86400 {
+		h := seconds / 3600
+		m := int(math.Round(float64(seconds%3600) / 60))
+		if m == 60 {
+			return strconv.Itoa(h+1) + "h"
+		}
+		if m == 0 {
+			return strconv.Itoa(h) + "h"
+		}
+		return strconv.Itoa(h) + "h " + strconv.Itoa(m) + "m"
+	}
+	d := seconds / 86400
+	h := int(math.Round(float64(seconds%86400) / 3600))
+	if h == 24 {
+		return strconv.Itoa(d+1) + "d"
+	}
+	if h == 0 {
+		return strconv.Itoa(d) + "d"
+	}
+	return strconv.Itoa(d) + "d " + strconv.Itoa(h) + "h"
 }
 
 func microToUnit(v int64) float64 {

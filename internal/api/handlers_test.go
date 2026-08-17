@@ -44,6 +44,9 @@ func TestTelemetryFromSysfsFixture(t *testing.T) {
 	if snap.Battery.HealthPercent == nil || *snap.Battery.HealthPercent != 84.2 {
 		t.Fatalf("health %+v", snap.Battery.HealthPercent)
 	}
+	if !snap.Battery.EstimatedRuntimeAvailable || snap.Battery.EstimatedRuntimeSeconds == nil {
+		t.Fatal("fixture is discharging and should include estimated runtime")
+	}
 	if !contains(snap.AvailableFields, "energy_full") {
 		t.Fatalf("available_fields %v", snap.AvailableFields)
 	}
@@ -208,6 +211,15 @@ func TestTelemetryWithoutBatteryIsOK(t *testing.T) {
 	if snap.Battery.Present {
 		t.Fatal("expected present=false")
 	}
+	if snap.Battery.EstimatedRuntimeAvailable {
+		t.Fatal("no battery must not estimate runtime")
+	}
+	if snap.Battery.EstimatedRuntimeSeconds != nil || snap.Battery.EstimatedRuntimeHours != nil {
+		t.Fatalf("runtime must be null: %+v", snap.Battery)
+	}
+	if snap.Battery.EstimatedRuntimeReason == nil || *snap.Battery.EstimatedRuntimeReason != battery.RuntimeReasonNoBattery {
+		t.Fatalf("reason %+v", snap.Battery.EstimatedRuntimeReason)
+	}
 }
 
 func TestMockTelemetry(t *testing.T) {
@@ -217,6 +229,13 @@ func TestMockTelemetry(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
+	}
+	var snap battery.Snapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &snap); err != nil {
+		t.Fatal(err)
+	}
+	if !snap.Battery.EstimatedRuntimeAvailable || snap.Battery.EstimatedRuntimeSeconds == nil {
+		t.Fatal("live mock should include estimated runtime")
 	}
 }
 

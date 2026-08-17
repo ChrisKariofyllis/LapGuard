@@ -62,6 +62,7 @@ Power semantics:
 - `derived_power_supported` — `current_now` and `voltage_now` can be multiplied
 - Displayed watts prefer `power_now`, otherwise `current_now × voltage_now` (negative while discharging)
 - `0 W` is a real reading when `current_now` is zero, not a missing capability
+- Estimated time left is `energy_now_wh / abs(power_w)` while **discharging** with non-zero battery power. It is omitted on AC, when full, and when discharge power is 0 W. The value tracks current load and can move around.
 
 Health is `energy_full / energy_full_design` or `charge_full / charge_full_design`.
 

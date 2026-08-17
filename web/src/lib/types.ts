@@ -25,6 +25,10 @@ export type Battery = {
   health_percent?: number;
   naming_convention?: string;
   power_calculation?: string;
+  estimated_runtime_seconds?: number | null;
+  estimated_runtime_hours?: number | null;
+  estimated_runtime_available?: boolean;
+  estimated_runtime_reason?: string | null;
 };
 
 export type Telemetry = {

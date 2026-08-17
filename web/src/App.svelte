@@ -5,6 +5,7 @@
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import {
     abs,
+    fmtEstimatedRuntime,
     fmtInt,
     fmtNumber,
     healthTone,
@@ -271,6 +272,19 @@
             <span class="text-mist"> · {battery?.model_name || capabilities?.battery?.model}</span>
           {/if}
         </p>
+      </article>
+      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+        <p class="text-xs text-mist">Estimated time left</p>
+        <p class="mt-2 font-mono text-lg">
+          {fmtEstimatedRuntime(battery?.estimated_runtime_seconds, battery?.estimated_runtime_available)}
+        </p>
+        {#if battery?.estimated_runtime_available}
+          <p class="mt-1 text-[11px] text-mist">Based on current battery usage</p>
+        {:else}
+          <p class="mt-1 text-[11px] text-mist">
+            {battery?.estimated_runtime_reason ?? 'Available while discharging'}
+          </p>
+        {/if}
       </article>
     </section>
 

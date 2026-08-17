@@ -64,6 +64,7 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err != nil {
 		snap.Warnings = append(snap.Warnings, err.Error())
 		snap.MissingFields = append([]string{}, TrackedFields...)
+		snap.enrich()
 		return snap, nil
 	}
 	snap.Battery.Name = name
@@ -76,6 +77,7 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		snap.Battery.Present = false
 		snap.Warnings = append(snap.Warnings, fmt.Sprintf("%s reports present=0", name))
 		snap.AvailableFields = listAttrNames(dir)
+		snap.enrich()
 		return snap, nil
 	}
 	snap.Battery.Present = true
