@@ -4,9 +4,23 @@ Lightweight Linux laptop power manager for machines that stay on as 24/7 home se
 
 The API binds to `127.0.0.1:8585`. Remote access is intended to go through Tailscale later, not a public bind.
 
-**Milestone 3A is complete:** a secure configuration API and UI. Settings are validated, written atomically to `~/.config/lapguard/config.json` with mode `0600`, and never leak notification secrets into logs. Notification delivery, Docker stop, and host shutdown are **stored only** — they are not executed yet.
+**Milestone 3B is complete:** AC power-loss watching and a local outage event log. Notification delivery, Docker stop, and host shutdown are still **not executed**.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for tested laptops and charge-threshold behaviour.
+
+## Milestone 3B — AC power-loss watcher
+
+LapGuard polls `/sys/class/power_supply/` for supplies with `type=Mains` and reads `online`. Adapter names (`AC`, `ACAD`, `ADP1`, …) are discovered, not hardcoded.
+
+- On AC if **any** mains adapter is online
+- On battery if **all** detected mains adapters are offline
+- `UNKNOWN` if there is no mains adapter, or `online` is missing/malformed
+
+The watcher records a startup baseline **without** emitting an event. A new state must stay stable for **10 seconds** (configurable, `-power-debounce`) before `AC_CONNECTED`, `AC_DISCONNECTED`, or `AC_UNKNOWN` is stored. Poll interval defaults to **5 seconds** (`-power-poll`).
+
+Events are stored in SQLite at `~/.config/lapguard/events.db` (mode `0600`). Rows older than 90 days or beyond 1000 events are pruned. The log never stores secrets or battery serial numbers. There is no SSE endpoint in this milestone.
+
+This milestone does **not** run `systemctl poweroff`, `shutdown`, `docker stop`, or notification HTTP calls.
 
 ## Milestone 3A — Secure configuration API
 
@@ -64,6 +78,8 @@ Threshold **writes** are wired in `internal/thresholds` (sysfs `charge_control_*
 | PUT | `/api/v1/config` | Merge and persist those settings |
 | POST | `/api/v1/config/notifications` | Merge and persist the notifications section |
 | POST | `/api/v1/config/shutdown` | Merge and persist the shutdown section |
+| GET | `/api/v1/power` | Current power source (`AC` / `BATTERY` / `UNKNOWN`), adapters, watcher status |
+| GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
 
 ### `GET /api/v1/config`
 
@@ -131,11 +147,21 @@ Errors:
 
 `POST /api/v1/config/notifications` and `POST /api/v1/config/shutdown` take the section object (not wrapped) and use the same validation. They do **not** send a message or power off the host.
 
+### `GET /api/v1/power`
+
+Returns the current mains classification and watcher status. `source` is `AC`, `BATTERY`, or `UNKNOWN`. Adapter objects include `name`, `online`, and `readable` only — no serial numbers.
+
+### `GET /api/v1/events`
+
+Query parameters: `limit` (default 50) and optional `type` (`AC_CONNECTED`, `AC_DISCONNECTED`, `AC_UNKNOWN`). Newest first. Invalid `type` or `limit` returns HTTP 400.
+
 ## UI
 
 The dashboard Capabilities panel lists each feature as enabled or not supported, with the detection method and fallback reason. Tools and kernel modules are shown as chips. **Re-scan** calls `/api/v1/discover` and refreshes the panel.
 
 The Configuration panel edits notifications, shutdown thresholds, and Docker drain settings. **Save settings** calls `PUT /api/v1/config`. **Send test notification**, **Shut down now**, and **Stop Docker containers** stay disabled until a later milestone implements execution.
+
+The Power source panel shows AC / battery / unknown, discovered mains adapters, and the recent outage log from `GET /api/v1/events`. The startup baseline is not listed as an event.
 
 ## Layout
 
@@ -143,9 +169,12 @@ The Configuration panel edits notifications, shutdown thresholds, and Docker dra
 cmd/lapguard/main.go
 internal/discovery/          # sysfs / modules / tools / threshold detection
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
+internal/power/              # mains scan, debounce watcher
+internal/storage/            # SQLite outage event log
 internal/thresholds/         # sysfs writes or tlp setcharge (no HTTP yet)
 internal/api/handlers.go
 internal/api/config.go       # GET/PUT config, POST notifications/shutdown
+internal/api/power.go        # GET /power and GET /events
 internal/config/             # flags + atomic ~/.config/lapguard/config.json
 testdata/sysfs/BAT0/
 web/
@@ -183,5 +212,6 @@ First start writes `~/.config/lapguard/config.json` (listen, provider, `threshol
 - Default bind is loopback only.
 - Do not run the process as root during development.
 - Config file mode is `0600`; webhook URLs and tokens stay out of logs.
+- Outage events live in `~/.config/lapguard/events.db` (mode `0600`). Older than 90 days or beyond 1000 rows are pruned.
 - Build the UI with `cd web && npm run build`, then `go run ./cmd/lapguard` serves `web/dist`.
 - Notification delivery, Docker drain, host shutdown, and authentication remain out of scope for execution. Discovery still reports whether Docker is present; the config API only stores the intended policy.

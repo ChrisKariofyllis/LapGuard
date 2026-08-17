@@ -92,6 +92,10 @@ export type Capabilities = {
     temperature: boolean;
     alarm_control: boolean;
     docker_shutdown: boolean;
+    power_loss_detection: boolean;
+    outage_event_log: boolean;
+    notifications: boolean;
+    graceful_shutdown: boolean;
   };
   tools: Tools;
   kernel_modules: string[];
@@ -128,6 +132,41 @@ export type AppConfig = {
     docker: string;
   };
   notes?: string[];
+};
+
+export type PowerAdapter = {
+  name: string;
+  type: string;
+  online: boolean | null;
+  readable: boolean;
+};
+
+export type PowerStatus = {
+  timestamp: string;
+  source: 'AC' | 'BATTERY' | 'UNKNOWN';
+  adapters: PowerAdapter[];
+  reason?: string;
+  watcher: {
+    running: boolean;
+    interval_seconds: number;
+    debounce_seconds: number;
+    last_poll?: string;
+    baseline_recorded: boolean;
+    pending_source?: string;
+  };
+};
+
+export type PowerEvent = {
+  id: number;
+  type: 'AC_CONNECTED' | 'AC_DISCONNECTED' | 'AC_UNKNOWN' | string;
+  timestamp: string;
+  source: string;
+  duration_ms?: number;
+};
+
+export type EventsResponse = {
+  events: PowerEvent[];
+  available: boolean;
 };
 
 export type DiscoverReport = {

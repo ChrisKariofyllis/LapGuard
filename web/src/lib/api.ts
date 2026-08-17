@@ -1,4 +1,4 @@
-import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, NotificationsConfig, ShutdownConfig, Telemetry } from './types';
+import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, ShutdownConfig, Telemetry } from './types';
 
 async function readError(path: string, res: Response): Promise<string> {
   try {
@@ -71,4 +71,17 @@ export function postNotifications(body: NotificationsConfig): Promise<AppConfig>
 
 export function postShutdown(body: ShutdownConfig): Promise<AppConfig> {
   return sendJSON<AppConfig>('POST', '/api/v1/config/shutdown', body);
+}
+
+export function fetchPower(signal?: AbortSignal): Promise<PowerStatus> {
+  return getJSON<PowerStatus>('/api/v1/power', signal);
+}
+
+export function fetchEvents(limit = 50, type?: string, signal?: AbortSignal): Promise<EventsResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (type) {
+    params.set('type', type);
+  }
+  return getJSON<EventsResponse>(`/api/v1/events?${params.toString()}`, signal);
 }

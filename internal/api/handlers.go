@@ -14,6 +14,8 @@ import (
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
 	"lapguard/internal/discovery"
+	"lapguard/internal/power"
+	"lapguard/internal/storage"
 )
 
 type Server struct {
@@ -23,6 +25,9 @@ type Server struct {
 
 	mu  sync.RWMutex
 	cfg config.Config
+
+	watcher *power.Watcher
+	events  *storage.Store
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
@@ -41,6 +46,13 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 	}
 }
 
+func (s *Server) AttachPower(w *power.Watcher, store *storage.Store) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.watcher = w
+	s.events = store
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/telemetry", s.handleTelemetry)
@@ -50,6 +62,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/config", s.handlePutConfig)
 	mux.HandleFunc("POST /api/v1/config/notifications", s.handlePostNotifications)
 	mux.HandleFunc("POST /api/v1/config/shutdown", s.handlePostShutdown)
+	mux.HandleFunc("GET /api/v1/power", s.handlePower)
+	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
@@ -172,6 +186,11 @@ func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Confi
 	if method == discovery.MethodNone && report.Thresholds.Recommendation == "" {
 		report.Thresholds.Recommendation = "Charge start/stop limits are not available on this hardware."
 	}
+	report.Features.Notifications = false
+	report.Features.GracefulShutdown = false
+	s.mu.RLock()
+	report.Features.OutageEventLog = s.events != nil
+	s.mu.RUnlock()
 	return report
 }
 
@@ -225,6 +244,8 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 			"config":               "/api/v1/config",
 			"config_notifications": "/api/v1/config/notifications",
 			"config_shutdown":      "/api/v1/config/shutdown",
+			"power":                "/api/v1/power",
+			"events":               "/api/v1/events",
 		},
 	})
 }
@@ -274,7 +295,7 @@ func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 		}
 		setCORS(w, r)
 		next.ServeHTTP(w, r)
-		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" {
+		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" {
 			return
 		}
 		log.Info("http",

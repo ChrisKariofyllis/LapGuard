@@ -25,6 +25,10 @@ LapGuard separates the raw sysfs file from the displayed wattage:
 
 The UI shows **Derived power** / **Power estimate** when only the current×voltage path is available. That is not “unsupported power”. A calculated **0 W** is valid when `current_now` is zero (idle / full).
 
+## AC adapters
+
+Mains supplies are discovered by `type=Mains` and the `online` attribute. Names such as `AC`, `ACAD`, `ADP1`, or `AC0` are not hardcoded. `power_loss_detection` is true when at least one mains `online` file is readable.
+
 ## Tested machines
 
 Full A3510 field lists are in the section below this table.

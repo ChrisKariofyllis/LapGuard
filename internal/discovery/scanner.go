@@ -30,6 +30,7 @@ type hardwareScan struct {
 	HasVoltage       bool
 	HasTemp          bool
 	HasAlarm         bool
+	HasReadableMains bool
 	ChargeStartPath  string
 	ChargeEndPath    string
 	ChargeStart      *int
@@ -83,9 +84,10 @@ func scanHardware(opts Options) hardwareScan {
 			sup.Present = present
 			scan.Batteries = append(scan.Batteries, sup)
 		case "mains":
-			if raw := readSupplyString(dir, "online"); raw != "" {
+			if raw := readSupplyString(dir, "online"); raw == "1" || raw == "0" {
 				on := raw == "1"
 				sup.Online = &on
+				scan.HasReadableMains = true
 			}
 			scan.Adapters = append(scan.Adapters, sup)
 		}

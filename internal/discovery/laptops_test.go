@@ -260,6 +260,12 @@ tp-smapi   = inactive (unsupported hardware)
 			if report.Features.CurrentVoltage != tc.wantCurrentVolt {
 				t.Fatalf("current_voltage=%v", report.Features.CurrentVoltage)
 			}
+			if !report.Features.PowerLossDetection {
+				t.Fatal("mock laptops expose a readable mains online attribute")
+			}
+			if report.Features.Notifications || report.Features.GracefulShutdown {
+				t.Fatal("notifications and graceful shutdown are not implemented")
+			}
 			if report.NamingConvention != tc.wantNaming {
 				t.Fatalf("naming %q, want %q", report.NamingConvention, tc.wantNaming)
 			}

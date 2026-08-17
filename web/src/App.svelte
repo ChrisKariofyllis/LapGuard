@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import ConfigPanel from './lib/ConfigPanel.svelte';
+  import PowerPanel from './lib/PowerPanel.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import {
     abs,
@@ -272,6 +273,8 @@
         </p>
       </article>
     </section>
+
+    <PowerPanel />
 
     <section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
       <div class="flex flex-wrap items-center justify-between gap-2">

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
@@ -27,6 +28,9 @@ const (
 	DefaultCriticalThreshold = 10
 	DefaultDockerTimeoutSecs = 30
 	ConfigFileMode           = os.FileMode(0o600)
+
+	DefaultPowerPoll     = 5 * time.Second
+	DefaultPowerDebounce = 10 * time.Second
 )
 
 // Config holds process-wide settings. Flags overlay a JSON file when present.
@@ -41,6 +45,9 @@ type Config struct {
 	Notifications   NotificationsConfig `json:"notifications"`
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
+	EventsDB        string              `json:"events_db,omitempty"`
+	PowerPoll       time.Duration       `json:"-"`
+	PowerDebounce   time.Duration       `json:"-"`
 	ConfigPath      string              `json:"-"`
 
 	setFlags       map[string]bool `json:"-"`
@@ -57,6 +64,8 @@ func defaults() Config {
 		Notifications:   DefaultNotifications(),
 		Shutdown:        DefaultShutdown(),
 		Docker:          DefaultDocker(),
+		PowerPoll:       DefaultPowerPoll,
+		PowerDebounce:   DefaultPowerDebounce,
 		setFlags:        map[string]bool{},
 	}
 }
@@ -155,6 +164,19 @@ func overlayFlags(file, flags Config) Config {
 	if flags.flagSet("threshold-method") {
 		out.ThresholdMethod = flags.ThresholdMethod
 	}
+	if flags.flagSet("events-db") {
+		out.EventsDB = flags.EventsDB
+	}
+	if flags.flagSet("power-poll") {
+		out.PowerPoll = flags.PowerPoll
+	} else if out.PowerPoll <= 0 {
+		out.PowerPoll = flags.PowerPoll
+	}
+	if flags.flagSet("power-debounce") {
+		out.PowerDebounce = flags.PowerDebounce
+	} else if out.PowerDebounce <= 0 {
+		out.PowerDebounce = flags.PowerDebounce
+	}
 	return out
 }
 
@@ -164,6 +186,27 @@ func DefaultPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, AppName, "config.json"), nil
+}
+
+func DefaultEventsDBPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, AppName, "events.db"), nil
+}
+
+func (c Config) EventsDBPath() string {
+	if strings.TrimSpace(c.EventsDB) != "" {
+		return c.EventsDB
+	}
+	if c.ConfigPath != "" {
+		return filepath.Join(filepath.Dir(c.ConfigPath), "events.db")
+	}
+	if def, err := DefaultEventsDBPath(); err == nil {
+		return def
+	}
+	return ""
 }
 
 func LoadFile(path string) (Config, error) {
@@ -198,6 +241,7 @@ func (c Config) Save(path string) error {
 		Notifications:   c.Notifications,
 		Shutdown:        c.Shutdown,
 		Docker:          c.Docker,
+		EventsDB:        c.EventsDB,
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -217,6 +261,7 @@ type persistDTO struct {
 	Notifications   NotificationsConfig `json:"notifications"`
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
+	EventsDB        string              `json:"events_db,omitempty"`
 }
 
 func (c *Config) Normalize() error {
@@ -251,6 +296,12 @@ func (c *Config) normalize() error {
 	}
 	if err := c.Docker.normalize(); err != nil {
 		return err
+	}
+	if c.PowerPoll <= 0 {
+		c.PowerPoll = DefaultPowerPoll
+	}
+	if c.PowerDebounce <= 0 {
+		c.PowerDebounce = DefaultPowerDebounce
 	}
 	return nil
 }
@@ -297,6 +348,9 @@ func parseFlags(args []string, cfg Config) (Config, error) {
 	fs.StringVar(&cfg.WebDir, "web-dir", cfg.WebDir, "directory of built Svelte assets; empty disables static serving")
 	fs.StringVar(&cfg.ConfigPath, "config", cfg.ConfigPath, "JSON config file (default: ~/.config/lapguard/config.json)")
 	fs.StringVar(&cfg.ThresholdMethod, "threshold-method", cfg.ThresholdMethod, "charge threshold method: auto, sysfs, tlp, or none")
+	fs.StringVar(&cfg.EventsDB, "events-db", cfg.EventsDB, "SQLite outage log (default: ~/.config/lapguard/events.db)")
+	fs.DurationVar(&cfg.PowerPoll, "power-poll", cfg.PowerPoll, "AC adapter poll interval")
+	fs.DurationVar(&cfg.PowerDebounce, "power-debounce", cfg.PowerDebounce, "required stable duration before an AC transition is recorded")
 	fs.BoolVar(&cfg.LogJSON, "log-json", cfg.LogJSON, "write logs as JSON")
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err

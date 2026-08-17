@@ -75,6 +75,10 @@ type Features struct {
 	Temperature           bool `json:"temperature"`
 	AlarmControl          bool `json:"alarm_control"`
 	DockerShutdown        bool `json:"docker_shutdown"`
+	PowerLossDetection    bool `json:"power_loss_detection"`
+	OutageEventLog        bool `json:"outage_event_log"`
+	Notifications         bool `json:"notifications"`
+	GracefulShutdown      bool `json:"graceful_shutdown"`
 }
 
 // Tools lists userspace helpers that LapGuard can detect.

@@ -119,5 +119,49 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		docker.Recommendation = "Host shutdown can still be added later without Docker drain."
 	}
 
-	return []FeatureStatus{charge, cycle, rawPower, derivedPower, cv, temp, alarm, docker}
+	loss := FeatureStatus{
+		Key:             "power_loss_detection",
+		Label:           "AC power-loss detection",
+		Enabled:         report.Features.PowerLossDetection,
+		DetectionMethod: "sysfs:type=Mains,online",
+	}
+	if loss.Enabled {
+		loss.Recommendation = "Mains adapters are watched via sysfs online. Adapter names are discovered, not hardcoded."
+	} else {
+		loss.WhyNot = "no readable mains online attribute was found"
+		loss.Recommendation = "Power-loss events cannot be recorded without a type=Mains supply that exposes online."
+	}
+
+	log := FeatureStatus{
+		Key:             "outage_event_log",
+		Label:           "Outage event log",
+		Enabled:         report.Features.OutageEventLog,
+		DetectionMethod: "sqlite",
+	}
+	if log.Enabled {
+		log.Recommendation = "AC connect/disconnect events are stored locally. Rows older than 90 days or beyond 1000 events are pruned."
+	} else {
+		log.WhyNot = "event database is not available"
+		log.Recommendation = "The outage log will appear once LapGuard can create its SQLite file."
+	}
+
+	notify := FeatureStatus{
+		Key:             "notifications",
+		Label:           "Notifications",
+		Enabled:         report.Features.Notifications,
+		DetectionMethod: "config",
+	}
+	notify.WhyNot = "notification delivery is not implemented in this milestone"
+	notify.Recommendation = "Webhook settings can be stored, but no messages are sent yet."
+
+	graceful := FeatureStatus{
+		Key:             "graceful_shutdown",
+		Label:           "Graceful shutdown",
+		Enabled:         report.Features.GracefulShutdown,
+		DetectionMethod: "none",
+	}
+	graceful.WhyNot = "host shutdown is not implemented in this milestone"
+	graceful.Recommendation = "Shutdown thresholds can be stored, but LapGuard will not power off the machine yet."
+
+	return []FeatureStatus{charge, cycle, rawPower, derivedPower, cv, temp, alarm, loss, log, notify, graceful, docker}
 }

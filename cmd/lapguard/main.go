@@ -14,6 +14,8 @@ import (
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
 	"lapguard/internal/discovery"
+	"lapguard/internal/power"
+	"lapguard/internal/storage"
 	"lapguard/internal/thresholds"
 )
 
@@ -44,6 +46,9 @@ func run(args []string) error {
 		"sysfs_root", cfg.SysfsRoot,
 		"threshold_method", cfg.ThresholdMethod,
 		"config", cfg.ConfigPath,
+		"events_db", cfg.EventsDBPath(),
+		"power_poll", cfg.PowerPoll.String(),
+		"power_debounce", cfg.PowerDebounce.String(),
 	)
 	if !cfg.Loopback() {
 		log.Warn("listen address is not loopback; remote access should go through Tailscale, not a public bind")
@@ -89,7 +94,41 @@ func run(args []string) error {
 		"modules", report.KernelModules,
 		"tlp", report.AvailableTools.TLP,
 		"tlp_version", report.AvailableTools.TLPVersion,
+		"power_loss_detection", report.Features.PowerLossDetection,
 	)
+
+	var store *storage.Store
+	if path := cfg.EventsDBPath(); path != "" {
+		opened, err := storage.Open(path)
+		if err != nil {
+			log.Warn("event log unavailable", "path", path, "err", err)
+		} else {
+			store = opened
+			defer func() { _ = store.Close() }()
+			log.Info("event log ready", "path", path)
+		}
+	}
+
+	watcher := power.NewWatcher(power.Options{
+		SysfsRoot: cfg.SysfsRoot,
+		Interval:  cfg.PowerPoll,
+		Debounce:  cfg.PowerDebounce,
+		Logger:    log,
+		OnEvent: func(tr power.Transition) {
+			if store == nil {
+				return
+			}
+			if _, err := store.Insert(context.Background(), storage.Event{
+				Type:       tr.Type,
+				Timestamp:  tr.At,
+				Source:     tr.Source,
+				DurationMs: tr.DurationMs,
+			}); err != nil {
+				log.Error("persist power event", "err", err, "type", tr.Type)
+			}
+		},
+	})
+	go watcher.Run(ctx)
 
 	if cfg.ShouldWrite() {
 		if err := cfg.Save(cfg.ConfigPath); err != nil {
@@ -100,6 +139,7 @@ func run(args []string) error {
 	}
 
 	app := api.New(provider, cfg, log, disc)
+	app.AttachPower(watcher, store)
 	httpSrv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           app.Handler(),
