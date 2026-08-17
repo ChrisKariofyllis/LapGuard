@@ -1,0 +1,115 @@
+name: Compatibility report
+description: Report what LapGuard discovers on a Linux laptop (no serials, IPs, or secrets)
+title: "compat: <vendor> <model>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing LapGuard.
+
+        **Privacy:** strip serial numbers, usernames, hostnames that identify you, IP addresses, Tailscale names, tokens, passwords, and webhook URLs before pasting anything. Fake identifiers such as `TEST-BAT-001` are fine.
+
+        Use `GET /api/v1/discover` and `GET /api/v1/capabilities`. Do not paste `config.json`.
+  - type: input
+    id: machine
+    attributes:
+      label: Machine
+      description: Vendor and model only (for example, Fujitsu Lifebook A3510).
+      placeholder: Vendor Model
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and kernel
+      placeholder: Ubuntu 26.04, 6.17.0-generic
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: How you ran LapGuard
+      options:
+        - Real hardware (sysfs)
+        - Fixture / mock only
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: battery
+    attributes:
+      label: Battery sysfs name
+      description: For example BAT0 or BAT1. Leave blank if there is no pack.
+      placeholder: BAT1
+  - type: dropdown
+    id: naming
+    attributes:
+      label: Battery naming convention
+      options:
+        - charge_* (charge_now / charge_full)
+        - energy_* (energy_now / energy_full)
+        - both
+        - no battery
+    validations:
+      required: true
+  - type: dropdown
+    id: power
+    attributes:
+      label: Power reading
+      options:
+        - power_now present (raw)
+        - derived from current_now × voltage_now
+        - both
+        - neither / unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: thresholds
+    attributes:
+      label: Charge-threshold method
+      description: From features.charge_thresholds (sysfs, tlp, or none).
+      options:
+        - sysfs
+        - tlp
+        - none
+        - unknown
+    validations:
+      required: true
+  - type: input
+    id: modules
+    attributes:
+      label: Relevant kernel modules
+      description: Vendor extras only (thinkpad_acpi, fujitsu_laptop, asus_wmi, …). Omit unrelated modules.
+  - type: dropdown
+    id: tlp
+    attributes:
+      label: TLP present
+      options:
+        - "no"
+        - "yes, cannot set charge thresholds"
+        - "yes, can set charge thresholds"
+        - unknown
+    validations:
+      required: true
+  - type: textarea
+    id: discover
+    attributes:
+      label: Redacted GET /api/v1/discover (or capabilities)
+      description: Paste JSON after removing serial_number, hostname if sensitive, and any URLs or tokens. Keep battery name, present, manufacturer/model if public, available fields, features, and why_not text.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything surprising (missing temp, BAT1 instead of BAT0, derived 0 W while idle, …).
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy checklist
+      options:
+        - label: I removed serial numbers, usernames, IP addresses, tokens, and webhook URLs.
+          required: true
+        - label: I understand the safety controller is dry-run only and this report is about detection, not shutdown.
+          required: true

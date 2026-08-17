@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and build (linux/amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Lint (gofmt + go vet)
+        run: make lint
+
+      - name: Go tests
+        run: make test
+
+      - name: Build frontend and Go binary
+        run: make build
+
+      - name: Confirm linux/amd64 binary
+        run: |
+          test -s bin/lapguard
+          go version -m bin/lapguard
+          go version -m bin/lapguard | grep -q 'GOOS=linux'
+          go version -m bin/lapguard | grep -q 'GOARCH=amd64'
+          go version -m bin/lapguard | grep -q 'embedui'
+          go version -m bin/lapguard | grep -q 'lapguard/internal/config.Version='
+          if go version -m bin/lapguard | grep -q -- '-dirty'; then
+            echo "embedded version must not include -dirty"
+            exit 1
+          fi

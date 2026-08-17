@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -236,6 +237,26 @@ func TestMockTelemetry(t *testing.T) {
 	}
 	if !snap.Battery.EstimatedRuntimeAvailable || snap.Battery.EstimatedRuntimeSeconds == nil {
 		t.Fatal("live mock should include estimated runtime")
+	}
+}
+
+func TestRootJSONWhenFrontendUnavailable(t *testing.T) {
+	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585", WebDir: "none"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("content-type %q", ct)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["app"] != "lapguard" {
+		t.Fatalf("body %+v", body)
 	}
 }
 

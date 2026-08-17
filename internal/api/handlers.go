@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -19,6 +21,7 @@ import (
 	"lapguard/internal/power"
 	"lapguard/internal/safety"
 	"lapguard/internal/storage"
+	"lapguard/internal/webui"
 )
 
 type Server struct {
@@ -263,13 +266,19 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) staticHandler() http.Handler {
 	webDir := strings.TrimSpace(s.currentConfig().WebDir)
-	if webDir == "" {
-		return http.HandlerFunc(s.handleAPIOnlyRoot)
+	if webDir != "" && webDir != "-" && !strings.EqualFold(webDir, "none") {
+		info, err := os.Stat(webDir)
+		if err == nil && info.IsDir() {
+			return s.staticFromDir(webDir)
+		}
 	}
-	info, err := os.Stat(webDir)
-	if err != nil || !info.IsDir() {
-		return http.HandlerFunc(s.handleAPIOnlyRoot)
+	if fsys, ok := webui.FS(); ok {
+		return s.staticFromFS(fsys)
 	}
+	return http.HandlerFunc(s.handleAPIOnlyRoot)
+}
+
+func (s *Server) staticFromDir(webDir string) http.Handler {
 	fileServer := http.FileServer(http.Dir(webDir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
@@ -287,6 +296,30 @@ func (s *Server) staticHandler() http.Handler {
 	})
 }
 
+func (s *Server) staticFromFS(fsys fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(fsys))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			http.NotFound(w, r)
+			return
+		}
+		rel := strings.Trim(path.Clean(r.URL.Path), "/")
+		if rel == "" || rel == "." {
+			rel = "index.html"
+		}
+		if f, err := fsys.Open(rel); err == nil {
+			_ = f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		r2 := *r
+		u := *r.URL
+		u.Path = "/index.html"
+		r2.URL = &u
+		fileServer.ServeHTTP(w, &r2)
+	})
+}
+
 func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -295,7 +328,7 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"app":     config.AppName,
 		"version": config.Version,
-		"message": "frontend not built; use the Vite dev server or run npm run build in web/",
+		"message": "frontend not available; use a release binary, run make build, or start the Vite dev server",
 		"api": map[string]string{
 			"telemetry":            "/api/v1/telemetry",
 			"capabilities":         "/api/v1/capabilities",

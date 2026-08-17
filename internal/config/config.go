@@ -15,7 +15,6 @@ import (
 
 const (
 	AppName = "lapguard"
-	Version = "0.6.0-alpha"
 
 	DefaultListen          = "127.0.0.1:8585"
 	DefaultProvider        = "auto"
@@ -33,6 +32,11 @@ const (
 	DefaultPowerPoll     = 5 * time.Second
 	DefaultPowerDebounce = 10 * time.Second
 )
+
+// Version is the build identifier. `go run` / `go test` use "dev".
+// `make build` and release binaries override it with
+// -ldflags "-X lapguard/internal/config.Version=…".
+var Version = "dev"
 
 // Config holds process-wide settings. Flags overlay a JSON file when present.
 type Config struct {

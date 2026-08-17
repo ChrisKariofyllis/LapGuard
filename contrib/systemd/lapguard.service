@@ -1,0 +1,41 @@
+# LapGuard system service
+#
+# Optional alternative to the user unit. Creates /etc/lapguard (config) and
+# /var/lib/lapguard (event log) via systemd directory directives.
+#
+# Create a dedicated account first (see docs/install.md). Do not add this
+# user to sudoers and do not grant CAP_SYS_BOOT. The alpha safety controller
+# is dry-run only: this unit must not execute Docker or host shutdown.
+
+[Unit]
+Description=LapGuard laptop power manager (alpha, dry-run safety)
+Documentation=https://github.com/ChrisKariofyllis/LapGuard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lapguard
+Group=lapguard
+ExecStart=/usr/local/bin/lapguard -config /etc/lapguard/config.json -events-db /var/lib/lapguard/events.db -web-dir none
+Restart=on-failure
+RestartSec=5
+
+ConfigurationDirectory=lapguard
+ConfigurationDirectoryMode=0750
+StateDirectory=lapguard
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/lapguard
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

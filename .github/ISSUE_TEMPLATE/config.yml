@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Compatibility notes
+    url: https://github.com/ChrisKariofyllis/LapGuard/blob/main/COMPATIBILITY.md
+    about: Read COMPATIBILITY.md before filing a hardware report.

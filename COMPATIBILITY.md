@@ -101,5 +101,5 @@ Do not record battery serial numbers, webhook URLs, tokens, passwords, usernames
 2. Confirm `features.charge_thresholds` is `sysfs`, `tlp`, or `none`.
 3. Record `raw_power_now_supported` vs `derived_power_supported` (absence of `power_now` is not a failure if current×voltage works).
 4. Record the battery naming convention (`energy` / `charge` / `both`) and any vendor module. For charge-named packs, note that energy (Wh) is derived from charge × voltage.
-5. Omit serial numbers and other private identifiers.
-6. Send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.
+5. **Privacy:** omit serial numbers, usernames, IP addresses, tokens, and webhook URLs. Do not paste `config.json`.
+6. Open a GitHub issue with the **Compatibility report** template, or send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.

@@ -1,0 +1,65 @@
+# Builds tagged binaries and uploads them. A draft GitHub Release is created
+# with the artifacts attached; it is not published. A maintainer must publish
+# the draft explicitly.
+name: Release build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-build:
+    name: Linux binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Version
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build web and binaries
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: make release-build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lapguard-${{ steps.version.outputs.value }}-linux
+          path: |
+            dist/lapguard_${{ steps.version.outputs.value }}_linux-amd64
+            dist/lapguard_${{ steps.version.outputs.value }}_linux-arm64
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attach binaries to a draft GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            dist/lapguard_${{ steps.version.outputs.value }}_linux-amd64
+            dist/lapguard_${{ steps.version.outputs.value }}_linux-arm64
+            dist/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

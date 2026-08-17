@@ -1,0 +1,22 @@
+# LapGuard user service (recommended for alpha)
+
+# Runs as your login user. Config and the outage log stay under
+# ~/.config/lapguard/. The process does not need root, Docker, or TLP.
+#
+# This unit does not grant extra privileges. LapGuard will not stop
+# containers or shut down the host in this alpha.
+
+[Unit]
+Description=LapGuard laptop power manager (alpha, dry-run safety)
+Documentation=https://github.com/ChrisKariofyllis/LapGuard
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/lapguard -config %h/.config/lapguard/config.json -web-dir none
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
