@@ -79,6 +79,7 @@ type Features struct {
 	OutageEventLog        bool `json:"outage_event_log"`
 	Notifications         bool `json:"notifications"`
 	GracefulShutdown      bool `json:"graceful_shutdown"`
+	BatterySafety         bool `json:"battery_safety"`
 }
 
 // Tools lists userspace helpers that LapGuard can detect.

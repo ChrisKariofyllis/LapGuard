@@ -60,6 +60,16 @@ type DockerConfig struct {
 	TimeoutSeconds int  `json:"timeout_seconds"`
 }
 
+// SafetyConfig gates the battery safety controller. dry_run and require_ac_loss
+// default to true. This milestone never executes host commands even if dry_run
+// is later set to false in the file.
+type SafetyConfig struct {
+	DryRun                bool `json:"dry_run"`
+	RequireACLoss         bool `json:"require_ac_loss"`
+	MinimumBatteryPercent int  `json:"minimum_battery_percent"`
+	CooldownSeconds       int  `json:"cooldown_seconds"`
+}
+
 type ExecutionStatus struct {
 	Notifications string `json:"notifications"`
 	Shutdown      string `json:"shutdown"`
@@ -71,6 +81,7 @@ type APIConfig struct {
 	Notifications NotificationsView `json:"notifications"`
 	Shutdown      ShutdownConfig    `json:"shutdown"`
 	Docker        DockerConfig      `json:"docker"`
+	Safety        SafetyConfig      `json:"safety"`
 	Execution     ExecutionStatus   `json:"execution"`
 	Notes         []string          `json:"notes,omitempty"`
 }
@@ -90,6 +101,15 @@ func DefaultDocker() DockerConfig {
 	return DockerConfig{TimeoutSeconds: DefaultDockerTimeoutSecs}
 }
 
+func DefaultSafety() SafetyConfig {
+	return SafetyConfig{
+		DryRun:                true,
+		RequireACLoss:         true,
+		MinimumBatteryPercent: 0,
+		CooldownSeconds:       DefaultSafetyCooldown,
+	}
+}
+
 func StoredOnlyExecution() ExecutionStatus {
 	return ExecutionStatus{
 		Notifications: ExecutionStoredOnly,
@@ -103,13 +123,14 @@ func (c Config) APIView() APIConfig {
 		Notifications: c.Notifications.Public(),
 		Shutdown:      c.Shutdown,
 		Docker:        c.Docker,
+		Safety:        c.Safety,
 		Execution: ExecutionStatus{
 			Notifications: c.Notifications.ExecutionState(),
 			Shutdown:      ExecutionStoredOnly,
 			Docker:        ExecutionStoredOnly,
 		},
 		Notes: []string{
-			"Notification delivery runs only when a provider is configured and enabled. Docker container stop and host shutdown are stored but not executed.",
+			"Notification delivery runs only when a provider is configured and enabled. The battery safety controller is dry-run only: Docker stop and host shutdown are never executed.",
 		},
 	}
 }
@@ -214,6 +235,17 @@ func (d *DockerConfig) normalize() error {
 	return nil
 }
 
+func (s *SafetyConfig) normalize() error {
+	s.DryRun = true
+	if err := validatePercent("minimum_battery_percent", s.MinimumBatteryPercent); err != nil {
+		return err
+	}
+	if s.CooldownSeconds < 0 || s.CooldownSeconds > 86400 {
+		return invalidConfig("safety cooldown_seconds must be between 0 and 86400")
+	}
+	return nil
+}
+
 func validatePercent(name string, value int) error {
 	if value < 0 || value > 100 {
 		return invalidConfig(name + " must be between 0 and 100")
@@ -251,6 +283,13 @@ type ShutdownPatch struct {
 type DockerPatch struct {
 	StopEnabled    *bool `json:"stop_enabled"`
 	TimeoutSeconds *int  `json:"timeout_seconds"`
+}
+
+type SafetyPatch struct {
+	DryRun                *bool `json:"dry_run"`
+	RequireACLoss         *bool `json:"require_ac_loss"`
+	MinimumBatteryPercent *int  `json:"minimum_battery_percent"`
+	CooldownSeconds       *int  `json:"cooldown_seconds"`
 }
 
 func (n NotificationsConfig) Apply(p NotificationsPatch) (NotificationsConfig, error) {
@@ -307,6 +346,26 @@ func (d DockerConfig) Apply(p DockerPatch) (DockerConfig, error) {
 	}
 	if err := out.normalize(); err != nil {
 		return DockerConfig{}, err
+	}
+	return out, nil
+}
+
+func (s SafetyConfig) Apply(p SafetyPatch) (SafetyConfig, error) {
+	out := s
+	if p.DryRun != nil {
+		out.DryRun = *p.DryRun
+	}
+	if p.RequireACLoss != nil {
+		out.RequireACLoss = *p.RequireACLoss
+	}
+	if p.MinimumBatteryPercent != nil {
+		out.MinimumBatteryPercent = *p.MinimumBatteryPercent
+	}
+	if p.CooldownSeconds != nil {
+		out.CooldownSeconds = *p.CooldownSeconds
+	}
+	if err := out.normalize(); err != nil {
+		return SafetyConfig{}, err
 	}
 	return out, nil
 }

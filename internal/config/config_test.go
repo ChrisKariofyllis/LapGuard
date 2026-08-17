@@ -241,6 +241,9 @@ func TestLoadFileKeepsSettingsDefaults(t *testing.T) {
 	if cfg.Notifications.Provider != "none" {
 		t.Fatalf("notifications %+v", cfg.Notifications)
 	}
+	if !cfg.Safety.DryRun || !cfg.Safety.RequireACLoss {
+		t.Fatalf("safety %+v", cfg.Safety)
+	}
 	if cfg.Shutdown.WarningThreshold != 20 || cfg.Shutdown.CriticalThreshold != 10 {
 		t.Fatalf("shutdown %+v", cfg.Shutdown)
 	}

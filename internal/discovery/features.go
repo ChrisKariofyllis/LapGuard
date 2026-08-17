@@ -164,8 +164,21 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		Enabled:         report.Features.GracefulShutdown,
 		DetectionMethod: "none",
 	}
-	graceful.WhyNot = "host shutdown is not implemented in this milestone"
-	graceful.Recommendation = "Shutdown thresholds can be stored, but LapGuard will not power off the machine yet."
+	graceful.WhyNot = "host shutdown is not implemented; the safety controller is dry-run only"
+	graceful.Recommendation = "Warning and critical percents are monitored. LapGuard will not power off the machine in this milestone."
 
-	return []FeatureStatus{charge, cycle, rawPower, derivedPower, cv, temp, alarm, loss, log, notify, graceful, docker}
+	safe := FeatureStatus{
+		Key:             "battery_safety",
+		Label:           "Battery safety controller",
+		Enabled:         report.Features.BatterySafety,
+		DetectionMethod: "config",
+	}
+	if safe.Enabled {
+		safe.Recommendation = "Dry run — no commands will be executed. Warning and critical states are simulated only."
+	} else {
+		safe.WhyNot = "safety controller is not initialized"
+		safe.Recommendation = "The controller starts with the API process and stays in dry-run mode."
+	}
+
+	return []FeatureStatus{charge, cycle, rawPower, derivedPower, cv, temp, alarm, loss, log, notify, safe, graceful, docker}
 }

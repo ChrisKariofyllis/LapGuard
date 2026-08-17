@@ -4,7 +4,9 @@ Lightweight Linux laptop power manager for machines that stay on as 24/7 home se
 
 The API binds to `127.0.0.1:8585`. Remote access is intended to go through Tailscale later, not a public bind.
 
-**Milestone 3C is complete:** notification delivery (ntfy, Telegram, Discord) is implemented and **disabled by default**. Docker stop and host shutdown are still **not executed**.
+**Milestone 3D is dry-run only:** the battery safety controller classifies NORMAL / WARNING / CRITICAL / SHUTDOWN_PENDING, but **no host shutdown or Docker stop is implemented**. Notification delivery from 3C remains available. Docker stop and `systemctl poweroff` are never executed.
+
+> **Warning:** The safety controller is currently simulation/dry-run only. It will not stop containers, sync the filesystem, or power off the host.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for tested laptops and charge-threshold behaviour.
 
@@ -70,6 +72,27 @@ Battery warning/critical use the configured shutdown percents and fire only whil
 
 Turn `dry_run` off after a successful test. The estimate of remaining battery time and the outage log are unchanged.
 
+## Milestone 3D — Battery safety controller (dry-run only)
+
+> **Warning:** The safety controller is currently simulation/dry-run only. No host shutdown or Docker stop is implemented. LapGuard will not run `docker stop`, `systemctl poweroff`, `shutdown`, `reboot`, or `sync`.
+
+The controller polls battery **percentage** and classifies:
+
+| State | Meaning |
+| --- | --- |
+| `NORMAL` | Discharging (or idle) above the warning percent |
+| `WARNING` | Discharging at or below `warning_threshold` |
+| `CRITICAL` | Discharging at or below `critical_threshold` |
+| `SHUTDOWN_PENDING` | Critical and `shutdown.enabled` — an action plan is recorded, not executed |
+| `AC_CONNECTED` | Mains is online; warning/critical latches reset |
+| `UNKNOWN` | Missing percentage, missing pack, or unknown AC while `require_ac_loss` is true |
+
+Automatic actions are considered only while status is **Discharging**. Shutdown is never planned on AC or when AC state is unknown. Warning/critical fire once per discharge cycle; a 2% recovery margin stops small fluctuations from repeating events.
+
+On warning: emit `BATTERY_WARNING` and notify if enabled. On critical: emit `BATTERY_CRITICAL`, notify if enabled, and record an intended plan (`stop_docker` if configured, `sync`, `poweroff`). In dry-run the process **logs the event and intended actions only**.
+
+`safety.dry_run` is forced **true** in this milestone. `POST /api/v1/safety/test` with `{"scenario":"warning"}` or `"critical"` simulates a transition without reading sysfs and without executing commands.
+
 ## Milestone 3A — Secure configuration API
 
 User-managed settings live alongside the existing process config (listen, provider, sysfs root, threshold method):
@@ -79,6 +102,7 @@ User-managed settings live alongside the existing process config (listen, provid
 | `notifications` | `provider`, `enabled`, `dry_run`, `webhook_url`, `chat_id` | Delivery when enabled (3C) |
 | `shutdown` | `enabled`, `warning_threshold`, `critical_threshold` | Percents used for battery alerts; shutdown not executed |
 | `docker` | `stop_enabled`, `timeout_seconds` | Persisted only |
+| `safety` | `dry_run`, `require_ac_loss`, `minimum_battery_percent`, `cooldown_seconds` | Dry-run controller (3D); `dry_run` cannot be turned off yet |
 
 Persistence rules:
 
@@ -130,6 +154,8 @@ Threshold **writes** are wired in `internal/thresholds` (sysfs `charge_control_*
 | GET | `/api/v1/power` | Current power source (`AC` / `BATTERY` / `UNKNOWN`), adapters, watcher status |
 | GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
 | POST | `/api/v1/actions/test-notification` | Send a test message (requires enabled provider) |
+| GET | `/api/v1/safety` | Safety controller state, thresholds, intended actions |
+| POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run, no commands) |
 
 ### `GET /api/v1/config`
 
@@ -154,6 +180,12 @@ Returns the in-memory settings (defaults if the file has no user sections yet):
   "docker": {
     "stop_enabled": false,
     "timeout_seconds": 30
+  },
+  "safety": {
+    "dry_run": true,
+    "require_ac_loss": true,
+    "minimum_battery_percent": 0,
+    "cooldown_seconds": 60
   },
   "execution": {
     "notifications": "unconfigured",
@@ -215,6 +247,8 @@ The dashboard Capabilities panel lists each feature as enabled or not supported,
 
 The Configuration panel edits notifications, shutdown thresholds, and Docker drain settings. **Save settings** calls `PUT /api/v1/config`. **Send test notification** calls `POST /api/v1/actions/test-notification` when notifications are enabled. **Shut down now** and **Stop Docker containers** stay disabled. Webhook URLs and chat IDs are not shown after save.
 
+The Safety controller panel shows the current state and warning/critical percents, with a persistent **Dry run — no commands will be executed** banner. **Simulate warning** and **Simulate critical** call `POST /api/v1/safety/test`.
+
 The Power source panel shows AC / battery / unknown, discovered mains adapters, and the recent outage log from `GET /api/v1/events`. The startup baseline is not listed as an event.
 
 ## Layout
@@ -227,9 +261,11 @@ internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage event log
 internal/thresholds/         # sysfs writes or tlp setcharge (no HTTP yet)
 internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
+internal/safety/             # battery safety state machine (recording executor only)
 internal/api/handlers.go
 internal/api/config.go       # GET/PUT config, POST notifications/shutdown
 internal/api/notify.go       # POST /actions/test-notification
+internal/api/safety.go       # GET /safety, POST /safety/test
 internal/api/power.go        # GET /power and GET /events
 internal/config/             # flags + atomic ~/.config/lapguard/config.json
 testdata/sysfs/BAT0/
@@ -270,4 +306,4 @@ First start writes `~/.config/lapguard/config.json` (listen, provider, `threshol
 - Config file mode is `0600`; webhook URLs and tokens stay out of logs.
 - Outage events live in `~/.config/lapguard/events.db` (mode `0600`). Older than 90 days or beyond 1000 rows are pruned.
 - Build the UI with `cd web && npm run build`, then `go run ./cmd/lapguard` serves `web/dist`.
-- Notification delivery is off by default. Docker drain, host shutdown, and authentication remain out of scope for execution. Discovery still reports whether Docker is present; the config API only stores the intended Docker/shutdown policy.
+- Notification delivery is off by default. The battery safety controller is **dry-run only** and never stops Docker or powers off the host. Authentication remains out of scope. Discovery still reports whether Docker is present; the config API only stores the intended Docker/shutdown policy.

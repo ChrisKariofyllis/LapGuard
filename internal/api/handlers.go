@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 	"lapguard/internal/discovery"
 	"lapguard/internal/notify"
 	"lapguard/internal/power"
+	"lapguard/internal/safety"
 	"lapguard/internal/storage"
 )
 
@@ -30,6 +32,7 @@ type Server struct {
 	watcher  *power.Watcher
 	events   *storage.Store
 	notifier *notify.Service
+	safety   *safety.Controller
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
@@ -52,7 +55,31 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 		},
 		Logger: log,
 	})
+	interval := cfg.PowerPoll
+	if interval <= 0 {
+		interval = config.DefaultPowerPoll
+	}
+	s.safety = safety.New(safety.Options{
+		Interval: interval,
+		Config:   func() config.Config { return s.currentConfig() },
+		Read:     s.safetyRead,
+		Notify: func(ctx context.Context, event notify.NotificationEvent) error {
+			n := s.Notifier()
+			if n == nil {
+				return nil
+			}
+			return n.Send(ctx, event)
+		},
+		Executor: safety.NewRecordingExecutor(),
+		Logger:   log,
+	})
 	return s
+}
+
+func (s *Server) Safety() *safety.Controller {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.safety
 }
 
 func (s *Server) Notifier() *notify.Service {
@@ -88,6 +115,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/actions/test-notification", s.handleTestNotification)
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
+	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)
+	mux.HandleFunc("POST /api/v1/safety/test", s.handleTestSafety)
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
@@ -218,6 +247,7 @@ func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Confi
 	s.mu.RLock()
 	report.Features.OutageEventLog = s.events != nil
 	notifierReady := s.notifier != nil
+	report.Features.BatterySafety = s.safety != nil
 	s.mu.RUnlock()
 	report.Features.Notifications = notifierReady && cfg.Notifications.ProviderConfigured()
 	return report
@@ -276,6 +306,8 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 			"test_notification":    "/api/v1/actions/test-notification",
 			"power":                "/api/v1/power",
 			"events":               "/api/v1/events",
+			"safety":               "/api/v1/safety",
+			"safety_test":          "/api/v1/safety/test",
 		},
 	})
 }
@@ -325,7 +357,7 @@ func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 		}
 		setCORS(w, r)
 		next.ServeHTTP(w, r)
-		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" {
+		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" || r.URL.Path == "/api/v1/safety" {
 			return
 		}
 		log.Info("http",

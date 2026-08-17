@@ -15,7 +15,7 @@ import (
 
 const (
 	AppName = "lapguard"
-	Version = "0.5.0-alpha"
+	Version = "0.6.0-alpha"
 
 	DefaultListen          = "127.0.0.1:8585"
 	DefaultProvider        = "auto"
@@ -27,6 +27,7 @@ const (
 	DefaultWarningThreshold  = 20
 	DefaultCriticalThreshold = 10
 	DefaultDockerTimeoutSecs = 30
+	DefaultSafetyCooldown    = 60
 	ConfigFileMode           = os.FileMode(0o600)
 
 	DefaultPowerPoll     = 5 * time.Second
@@ -45,6 +46,7 @@ type Config struct {
 	Notifications   NotificationsConfig `json:"notifications"`
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
+	Safety          SafetyConfig        `json:"safety"`
 	EventsDB        string              `json:"events_db,omitempty"`
 	PowerPoll       time.Duration       `json:"-"`
 	PowerDebounce   time.Duration       `json:"-"`
@@ -64,6 +66,7 @@ func defaults() Config {
 		Notifications:   DefaultNotifications(),
 		Shutdown:        DefaultShutdown(),
 		Docker:          DefaultDocker(),
+		Safety:          DefaultSafety(),
 		PowerPoll:       DefaultPowerPoll,
 		PowerDebounce:   DefaultPowerDebounce,
 		setFlags:        map[string]bool{},
@@ -241,6 +244,7 @@ func (c Config) Save(path string) error {
 		Notifications:   c.Notifications,
 		Shutdown:        c.Shutdown,
 		Docker:          c.Docker,
+		Safety:          c.Safety,
 		EventsDB:        c.EventsDB,
 	}, "", "  ")
 	if err != nil {
@@ -261,6 +265,7 @@ type persistDTO struct {
 	Notifications   NotificationsConfig `json:"notifications"`
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
+	Safety          SafetyConfig        `json:"safety"`
 	EventsDB        string              `json:"events_db,omitempty"`
 }
 
@@ -295,6 +300,9 @@ func (c *Config) normalize() error {
 		return err
 	}
 	if err := c.Docker.normalize(); err != nil {
+		return err
+	}
+	if err := c.Safety.normalize(); err != nil {
 		return err
 	}
 	if c.PowerPoll <= 0 {

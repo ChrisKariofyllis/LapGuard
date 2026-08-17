@@ -18,6 +18,7 @@ type settingsRequest struct {
 	Notifications *config.NotificationsPatch `json:"notifications"`
 	Shutdown      *config.ShutdownPatch      `json:"shutdown"`
 	Docker        *config.DockerPatch        `json:"docker"`
+	Safety        *config.SafetyPatch        `json:"safety"`
 	Execution     json.RawMessage            `json:"execution"`
 	Notes         json.RawMessage            `json:"notes"`
 }
@@ -53,6 +54,13 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			cfg.Docker = next
+		}
+		if req.Safety != nil {
+			next, err := cfg.Safety.Apply(*req.Safety)
+			if err != nil {
+				return err
+			}
+			cfg.Safety = next
 		}
 		return nil
 	})

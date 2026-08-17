@@ -100,6 +100,7 @@ export type Capabilities = {
     outage_event_log: boolean;
     notifications: boolean;
     graceful_shutdown: boolean;
+    battery_safety: boolean;
   };
   tools: Tools;
   kernel_modules: string[];
@@ -133,12 +134,57 @@ export type AppConfig = {
   notifications: NotificationsConfig;
   shutdown: ShutdownConfig;
   docker: DockerConfig;
+  safety?: SafetyConfig;
   execution: {
     notifications: string;
     shutdown: string;
     docker: string;
   };
   notes?: string[];
+};
+
+export type SafetyConfig = {
+  dry_run: boolean;
+  require_ac_loss: boolean;
+  minimum_battery_percent: number;
+  cooldown_seconds: number;
+};
+
+export type SafetyEvent = {
+  type: string;
+  timestamp: string;
+  percent?: number | null;
+  state?: string;
+};
+
+export type SafetyStatus = {
+  state: 'NORMAL' | 'WARNING' | 'CRITICAL' | 'SHUTDOWN_PENDING' | 'AC_CONNECTED' | 'UNKNOWN' | string;
+  dry_run: boolean;
+  message: string;
+  running: boolean;
+  battery_percent?: number | null;
+  battery_status?: string;
+  ac_source?: string;
+  discharging: boolean;
+  shutdown_enabled: boolean;
+  warning_threshold: number;
+  critical_threshold: number;
+  require_ac_loss: boolean;
+  minimum_battery_percent: number;
+  cooldown_seconds: number;
+  last_event?: SafetyEvent | null;
+  last_action?: string | null;
+  intended_actions: string[];
+  commands_executed: boolean;
+  reason?: string;
+};
+
+export type SafetyTestResult = {
+  ok: boolean;
+  dry_run?: boolean;
+  message?: string;
+  error?: string;
+  safety?: SafetyStatus;
 };
 
 export type PowerAdapter = {

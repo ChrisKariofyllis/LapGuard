@@ -1,4 +1,4 @@
-import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, ShutdownConfig, Telemetry } from './types';
+import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
 
 async function readError(path: string, res: Response): Promise<string> {
   try {
@@ -134,4 +134,29 @@ export function fetchEvents(limit = 50, type?: string, signal?: AbortSignal): Pr
     params.set('type', type);
   }
   return getJSON<EventsResponse>(`/api/v1/events?${params.toString()}`, signal);
+}
+
+export function fetchSafety(signal?: AbortSignal): Promise<SafetyStatus> {
+  return getJSON<SafetyStatus>('/api/v1/safety', signal);
+}
+
+export async function testSafety(scenario: 'warning' | 'critical'): Promise<SafetyTestResult> {
+  const res = await fetch('/api/v1/safety/test', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ scenario }),
+  });
+  const body = (await res.json().catch(() => ({}))) as SafetyTestResult & { detail?: string };
+  if (!res.ok) {
+    return {
+      ok: false,
+      dry_run: true,
+      error: body.error || body.detail || `safety test failed: ${res.status}`,
+      safety: body.safety,
+    };
+  }
+  return body;
 }

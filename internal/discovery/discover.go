@@ -102,6 +102,7 @@ func Run(ctx context.Context, opts Options) (CapabilityReport, error) {
 			OutageEventLog:        false,
 			Notifications:         false,
 			GracefulShutdown:      false,
+			BatterySafety:         false,
 		},
 		AvailableTools: tools.Tools,
 		KernelModules:  loaded,

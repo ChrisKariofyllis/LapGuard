@@ -138,31 +138,9 @@ func run(args []string) error {
 	})
 	go watcher.Run(ctx)
 	app.AttachPower(watcher, store)
-
-	go notify.WatchLevels(ctx, notify.LevelOptions{
-		Interval: cfg.PowerPoll,
-		Logger:   log,
-		Read: func(ctx context.Context) (notify.LevelReading, error) {
-			snap, err := provider.Snapshot(ctx)
-			if err != nil {
-				return notify.LevelReading{}, err
-			}
-			reading := notify.LevelReading{
-				Present:     snap.Battery.Present,
-				Discharging: notify.IsDischarging(snap.Battery.Status),
-			}
-			if snap.Battery.CapacityPercent != nil {
-				reading.Percent = *snap.Battery.CapacityPercent
-				reading.PercentOK = true
-			}
-			return reading, nil
-		},
-		Thresholds: func() (warning, critical int) {
-			sh := app.Config().Shutdown
-			return sh.WarningThreshold, sh.CriticalThreshold
-		},
-		Send: notifier.Send,
-	})
+	if ctrl := app.Safety(); ctrl != nil {
+		go ctrl.Run(ctx)
+	}
 
 	if cfg.ShouldWrite() {
 		if err := cfg.Save(cfg.ConfigPath); err != nil {
