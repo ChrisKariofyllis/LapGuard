@@ -11,22 +11,28 @@ import (
 
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
+	"lapguard/internal/discovery"
 )
 
 type Server struct {
 	provider battery.Provider
 	cfg      config.Config
 	log      *slog.Logger
+	disc     discovery.Reporter
 }
 
-func New(provider battery.Provider, cfg config.Config, log *slog.Logger) *Server {
+func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
 	if log == nil {
 		log = slog.Default()
+	}
+	if disc == nil {
+		disc = discovery.Static{}
 	}
 	return &Server{
 		provider: provider,
 		cfg:      cfg,
 		log:      log,
+		disc:     disc,
 	}
 }
 
@@ -34,29 +40,32 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/telemetry", s.handleTelemetry)
 	mux.HandleFunc("GET /api/v1/capabilities", s.handleCapabilities)
+	mux.HandleFunc("GET /api/v1/discover", s.handleDiscover)
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
 }
 
 type capabilitiesResponse struct {
-	App             string   `json:"app"`
-	Version         string   `json:"version"`
-	Provider        string   `json:"provider"`
-	Listen          string   `json:"listen"`
-	BatteryPresent  bool     `json:"battery_present"`
-	BatteryName     string   `json:"battery_name,omitempty"`
-	SysfsRoot       string   `json:"sysfs_root,omitempty"`
-	AvailableFields []string `json:"available_fields"`
-	Features        features `json:"features"`
-}
-
-type features struct {
-	Shutdown         bool `json:"shutdown"`
-	Docker           bool `json:"docker"`
-	ChargeThresholds bool `json:"charge_thresholds"`
-	Notifications    bool `json:"notifications"`
-	Authentication   bool `json:"authentication"`
+	App              string                    `json:"app"`
+	Version          string                    `json:"version"`
+	Provider         string                    `json:"provider"`
+	Listen           string                    `json:"listen"`
+	BatteryPresent   bool                      `json:"battery_present"`
+	BatteryName      string                    `json:"battery_name,omitempty"`
+	SysfsRoot        string                    `json:"sysfs_root,omitempty"`
+	Hostname         string                    `json:"hostname,omitempty"`
+	OS               string                    `json:"os,omitempty"`
+	Kernel           string                    `json:"kernel,omitempty"`
+	AvailableFields  []string                  `json:"available_fields"`
+	NamingConvention string                    `json:"naming_convention,omitempty"`
+	PowerCalculation string                    `json:"power_calculation,omitempty"`
+	ThresholdMethod  string                    `json:"threshold_method"`
+	Features         []discovery.FeatureStatus `json:"features"`
+	FeatureFlags     discovery.Features        `json:"feature_flags"`
+	Tools            discovery.Tools           `json:"tools"`
+	KernelModules    []string                  `json:"kernel_modules"`
+	Battery          discovery.BatteryIdentity `json:"battery"`
 }
 
 func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
@@ -75,29 +84,79 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	report := s.applyConfig(s.disc.Last())
 	fields := probe.AvailableFields
+	if len(fields) == 0 {
+		fields = report.AvailableFields
+	}
 	if fields == nil {
 		fields = []string{}
 	}
 
+	present := probe.BatteryPresent
+	name := probe.BatteryName
+	if !present && report.Battery.Present {
+		present = true
+		if name == "" {
+			name = report.Battery.Name
+		}
+	}
+
 	resp := capabilitiesResponse{
-		App:             config.AppName,
-		Version:         config.Version,
-		Provider:        s.provider.Kind(),
-		Listen:          s.cfg.Listen,
-		BatteryPresent:  probe.BatteryPresent,
-		BatteryName:     probe.BatteryName,
-		SysfsRoot:       probe.SysfsRoot,
-		AvailableFields: fields,
-		Features: features{
-			Shutdown:         false,
-			Docker:           false,
-			ChargeThresholds: false,
-			Notifications:    false,
-			Authentication:   false,
-		},
+		App:              config.AppName,
+		Version:          config.Version,
+		Provider:         s.provider.Kind(),
+		Listen:           s.cfg.Listen,
+		BatteryPresent:   present,
+		BatteryName:      name,
+		SysfsRoot:        firstNonEmpty(probe.SysfsRoot, s.cfg.SysfsRoot),
+		Hostname:         report.Hostname,
+		OS:               report.OS,
+		Kernel:           report.Kernel,
+		AvailableFields:  fields,
+		NamingConvention: firstNonEmpty(probe.NamingConvention, report.NamingConvention),
+		PowerCalculation: firstNonEmpty(probe.PowerCalculation, report.PowerCalculation),
+		ThresholdMethod:  report.Features.ChargeThresholds,
+		Features:         report.FeatureStatuses(),
+		FeatureFlags:     report.Features,
+		Tools:            report.AvailableTools,
+		KernelModules:    report.KernelModules,
+		Battery:          report.Battery,
+	}
+	if resp.KernelModules == nil {
+		resp.KernelModules = []string{}
 	}
 	s.writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDiscover(w http.ResponseWriter, r *http.Request) {
+	report, err := s.disc.Refresh(r.Context())
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, "failed to run hardware discovery", err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.applyConfig(report))
+}
+
+func (s *Server) applyConfig(report discovery.CapabilityReport) discovery.CapabilityReport {
+	detected := report.Features.ChargeThresholds
+	if detected == "" {
+		detected = discovery.MethodNone
+	}
+	method, warn := config.ResolveThresholdMethod(s.cfg.ThresholdMethod, detected)
+	report.Features.ChargeThresholds = method
+	report.Thresholds.Method = method
+	if report.Thresholds.DetectionMethod == "" {
+		report.Thresholds.DetectionMethod = "sysfs+tlp+thinkpad_acpi"
+	}
+	if warn != "" {
+		report.Notes = append(report.Notes, warn)
+		report.Thresholds.WhyNot = firstNonEmpty(report.Thresholds.WhyNot, warn)
+	}
+	if method == discovery.MethodNone && report.Thresholds.Recommendation == "" {
+		report.Thresholds.Recommendation = "Charge start/stop limits are not available on this hardware."
+	}
+	return report
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +205,7 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 		"api": map[string]string{
 			"telemetry":    "/api/v1/telemetry",
 			"capabilities": "/api/v1/capabilities",
+			"discover":     "/api/v1/discover",
 		},
 	})
 }
@@ -200,4 +260,13 @@ func setCORS(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type")
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }

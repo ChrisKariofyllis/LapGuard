@@ -34,6 +34,21 @@ func TestPowerWattsFromVoltageAndCurrent(t *testing.T) {
 	}
 }
 
+func TestChargeToEnergyWh(t *testing.T) {
+	ah := 3.6
+	v := 11.1
+	got := ChargeToEnergyWh(&ah, &v)
+	if got == nil {
+		t.Fatal("expected energy")
+	}
+	if math.Abs(*got-39.96) > 1e-9 {
+		t.Fatalf("got %v, want 39.96", *got)
+	}
+	if ChargeToEnergyWh(&ah, nil) != nil {
+		t.Fatal("expected nil without voltage")
+	}
+}
+
 func TestPowerWattsMissingInputs(t *testing.T) {
 	if PowerWatts(nil, nil, nil, "Discharging") != nil {
 		t.Fatal("expected nil when no measurements exist")
@@ -91,11 +106,27 @@ func TestSysfsProviderFullFixture(t *testing.T) {
 	assertInt(t, "cycle_count", snap.Battery.CycleCount, 312)
 	assertFloat(t, "power_w", snap.Battery.PowerW, -14.082)
 	assertFloat(t, "health", snap.Battery.HealthPercent, 84.2)
+	assertFloat(t, "energy_now", snap.Battery.EnergyNowWh, 32.0)
+	assertFloat(t, "temp", snap.Battery.TemperatureC, 31.5)
+	if snap.Battery.Manufacturer != "LGC" || snap.Battery.ModelName != "FixturePack" {
+		t.Fatalf("identity %+v", snap.Battery)
+	}
+	if snap.Battery.NamingConvention != NamingEnergy {
+		t.Fatalf("naming %q", snap.Battery.NamingConvention)
+	}
+	if snap.Battery.PowerCalculation != PowerMethodPowerNow {
+		t.Fatalf("power method %q", snap.Battery.PowerCalculation)
+	}
 	if snap.MissingFields == nil {
 		t.Fatal("missing_fields should be an empty slice, not nil")
 	}
-	if len(snap.MissingFields) != 0 {
-		t.Fatalf("unexpected missing fields: %v", snap.MissingFields)
+	for _, f := range []string{FieldStatus, FieldCapacity, FieldVoltageNow, FieldCurrentNow, FieldPowerNow, FieldEnergyFull, FieldEnergyFullDesign, FieldCycleCount} {
+		if contains(snap.MissingFields, f) {
+			t.Fatalf("core field %s should not be missing: %v", f, snap.MissingFields)
+		}
+	}
+	if !contains(snap.AvailableFields, FieldStatus) || !contains(snap.AvailableFields, "type") {
+		t.Fatalf("available_fields should include discovered sysfs names, got %v", snap.AvailableFields)
 	}
 }
 
@@ -200,8 +231,71 @@ func TestSysfsProviderProbe(t *testing.T) {
 	if !probe.BatteryPresent || probe.BatteryName != "BAT0" {
 		t.Fatalf("probe = %+v", probe)
 	}
-	if len(probe.AvailableFields) != len(TrackedFields) {
-		t.Fatalf("available fields %v", probe.AvailableFields)
+	for _, f := range []string{FieldStatus, FieldCapacity, FieldPowerNow, FieldEnergyFull, FieldCycleCount, "type", "present"} {
+		if !contains(probe.AvailableFields, f) {
+			t.Fatalf("available fields missing %s: %v", f, probe.AvailableFields)
+		}
+	}
+	if probe.NamingConvention != NamingEnergy {
+		t.Fatalf("naming %q", probe.NamingConvention)
+	}
+	if probe.PowerCalculation != PowerMethodPowerNow {
+		t.Fatalf("power method %q", probe.PowerCalculation)
+	}
+}
+
+func TestSysfsProviderChargeConvention(t *testing.T) {
+	root := t.TempDir()
+	bat := filepath.Join(root, "BAT0")
+	if err := os.MkdirAll(bat, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"type":               "Battery",
+		"present":            "1",
+		"status":             "Discharging",
+		"capacity":           "72",
+		"voltage_now":        "11100000",
+		"current_now":        "-1500000",
+		"charge_now":         "2592000",
+		"charge_full":        "3600000",
+		"charge_full_design": "4000000",
+		"cycle_count":        "88",
+		"manufacturer":       "SMP",
+		"model_name":         "ChargePack",
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(bat, name), []byte(body+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	p := NewSysfsProvider(root, "BAT0")
+	snap, err := p.Snapshot(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Battery.NamingConvention != NamingCharge {
+		t.Fatalf("naming %q", snap.Battery.NamingConvention)
+	}
+	if snap.Battery.PowerCalculation != PowerMethodCurrentVoltage {
+		t.Fatalf("power method %q", snap.Battery.PowerCalculation)
+	}
+	assertFloat(t, "charge_full", snap.Battery.ChargeFullAh, 3.6)
+	assertFloat(t, "health", snap.Battery.HealthPercent, 90)
+	if snap.Battery.EnergyFullWh == nil {
+		t.Fatal("energy_full_wh should be derived from charge_full * voltage")
+	}
+	wantEnergy := 3.6 * 11.1
+	assertFloat(t, "derived energy", snap.Battery.EnergyFullWh, wantEnergy)
+	if snap.Battery.PowerW == nil {
+		t.Fatal("power_w should be derived from voltage * current")
+	}
+	if contains(snap.MissingFields, FieldEnergyFull) {
+		t.Fatalf("energy_full should be omitted from missing_fields when charge_full exists: %v", snap.MissingFields)
+	}
+	if !contains(snap.AvailableFields, FieldChargeFull) {
+		t.Fatalf("available_fields %v", snap.AvailableFields)
 	}
 }
 

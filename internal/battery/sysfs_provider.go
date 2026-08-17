@@ -14,8 +14,20 @@ import (
 
 const defaultSysfsRoot = "/sys/class/power_supply"
 
+// skipAttrNames are sysfs entries that are not battery attributes.
+var skipAttrNames = map[string]struct{}{
+	"device":    {},
+	"power":     {},
+	"subsystem": {},
+	"uevent":    {},
+	"hwmon":     {},
+}
+
 // SysfsProvider reads Linux power_supply attributes from a configurable root.
 // The default root is /sys/class/power_supply; tests point it at testdata/sysfs.
+//
+// It tries both energy_* and charge_* naming conventions and omits any field
+// that is missing rather than failing the snapshot.
 type SysfsProvider struct {
 	root string
 	name string
@@ -41,10 +53,11 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 
 	snap := Snapshot{
-		Timestamp:     p.now().UTC(),
-		Provider:      p.Kind(),
-		Battery:       Battery{Name: p.name},
-		MissingFields: []string{},
+		Timestamp:       p.now().UTC(),
+		Provider:        p.Kind(),
+		Battery:         Battery{Name: p.name},
+		AvailableFields: []string{},
+		MissingFields:   []string{},
 	}
 
 	dir, name, err := p.resolveBatteryDir()
@@ -62,9 +75,11 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	if presentOK && !present {
 		snap.Battery.Present = false
 		snap.Warnings = append(snap.Warnings, fmt.Sprintf("%s reports present=0", name))
+		snap.AvailableFields = listAttrNames(dir)
 		return snap, nil
 	}
 	snap.Battery.Present = true
+	snap.AvailableFields = listAttrNames(dir)
 
 	status, missing, warn := readStringField(dir, FieldStatus)
 	snap.note(FieldStatus, missing, warn)
@@ -75,6 +90,11 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	} else {
 		v := int(cap)
 		snap.Battery.CapacityPercent = &v
+	}
+
+	level, missing, warn := readStringField(dir, FieldCapacityLevel)
+	if !missing && warn == "" {
+		snap.Battery.CapacityLevel = level
 	}
 
 	if v, missing, warn := readIntField(dir, FieldVoltageNow); missing || warn != "" {
@@ -98,6 +118,13 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		snap.Battery.PowerNowW = &watts
 	}
 
+	if v, missing, warn := readIntField(dir, FieldEnergyNow); missing || warn != "" {
+		snap.note(FieldEnergyNow, missing, warn)
+	} else {
+		wh := microToUnit(v)
+		snap.Battery.EnergyNowWh = &wh
+	}
+
 	if v, missing, warn := readIntField(dir, FieldEnergyFull); missing || warn != "" {
 		snap.note(FieldEnergyFull, missing, warn)
 	} else {
@@ -112,11 +139,65 @@ func (p *SysfsProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		snap.Battery.EnergyFullDesignWh = &wh
 	}
 
+	if v, missing, warn := readIntField(dir, FieldChargeNow); missing || warn != "" {
+		snap.note(FieldChargeNow, missing, warn)
+	} else {
+		ah := microToUnit(v)
+		snap.Battery.ChargeNowAh = &ah
+	}
+
+	if v, missing, warn := readIntField(dir, FieldChargeFull); missing || warn != "" {
+		snap.note(FieldChargeFull, missing, warn)
+	} else {
+		ah := microToUnit(v)
+		snap.Battery.ChargeFullAh = &ah
+	}
+
+	if v, missing, warn := readIntField(dir, FieldChargeFullDesign); missing || warn != "" {
+		snap.note(FieldChargeFullDesign, missing, warn)
+	} else {
+		ah := microToUnit(v)
+		snap.Battery.ChargeFullDesignAh = &ah
+	}
+
 	if v, missing, warn := readIntField(dir, FieldCycleCount); missing || warn != "" {
 		snap.note(FieldCycleCount, missing, warn)
 	} else {
 		n := int(v)
 		snap.Battery.CycleCount = &n
+	}
+
+	if v, missing, warn := readIntField(dir, FieldTemp); missing || warn != "" {
+		snap.note(FieldTemp, missing, warn)
+	} else {
+		c := deciToUnit(v)
+		snap.Battery.TemperatureC = &c
+	}
+
+	if v, missing, warn := readIntField(dir, FieldAlarm); missing || warn != "" {
+		snap.note(FieldAlarm, missing, warn)
+	} else {
+		snap.Battery.Alarm = &v
+	}
+
+	if s, missing, warn := readStringField(dir, FieldManufacturer); !missing && warn == "" {
+		snap.Battery.Manufacturer = s
+	}
+	if s, missing, warn := readStringField(dir, FieldModelName); !missing && warn == "" {
+		snap.Battery.ModelName = s
+	}
+	if s, missing, warn := readStringField(dir, FieldSerialNumber); !missing && warn == "" {
+		snap.Battery.SerialNumber = s
+	}
+	if s, missing, warn := readStringField(dir, FieldTechnology); !missing && warn == "" {
+		snap.Battery.Technology = s
+	}
+
+	if n, ok := readThreshold(dir, FieldChargeControlStart, FieldChargeStartThreshold); ok {
+		snap.Battery.ChargeStartThreshold = &n
+	}
+	if n, ok := readThreshold(dir, FieldChargeControlEnd, FieldChargeStopThreshold); ok {
+		snap.Battery.ChargeEndThreshold = &n
 	}
 
 	snap.enrich()
@@ -141,16 +222,13 @@ func (p *SysfsProvider) Probe(ctx context.Context) (Probe, error) {
 
 	present, presentOK, _ := readPresent(dir)
 	if presentOK && !present {
+		probe.AvailableFields = listAttrNames(dir)
 		return probe, nil
 	}
 	probe.BatteryPresent = true
-
-	for _, field := range TrackedFields {
-		path := filepath.Join(dir, field)
-		if _, err := os.Stat(path); err == nil {
-			probe.AvailableFields = append(probe.AvailableFields, field)
-		}
-	}
+	probe.AvailableFields = listAttrNames(dir)
+	probe.NamingConvention = detectNaming(probe.AvailableFields)
+	probe.PowerCalculation = detectPowerMethod(probe.AvailableFields)
 	return probe, nil
 }
 
@@ -274,6 +352,66 @@ func readIntField(dir, field string) (value int64, missing bool, warning string)
 		return 0, false, fmt.Sprintf("%s: not an integer %q", field, text)
 	}
 	return n, false, ""
+}
+
+func readThreshold(dir string, names ...string) (int, bool) {
+	for _, name := range names {
+		v, missing, warn := readIntField(dir, name)
+		if missing || warn != "" {
+			continue
+		}
+		return int(v), true
+	}
+	return 0, false
+}
+
+func listAttrNames(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return []string{}
+	}
+	out := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if _, skip := skipAttrNames[name]; skip {
+			continue
+		}
+		if entry.IsDir() {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+func detectNaming(fields []string) string {
+	var energy, charge bool
+	for _, f := range fields {
+		switch {
+		case strings.HasPrefix(f, "energy_"):
+			energy = true
+		case strings.HasPrefix(f, "charge_") && !strings.HasPrefix(f, "charge_control") && f != FieldChargeStartThreshold && f != FieldChargeStopThreshold:
+			charge = true
+		case f == FieldChargeNow || f == FieldChargeFull || f == FieldChargeFullDesign:
+			charge = true
+		}
+	}
+	return NamingConvention(energy, charge)
+}
+
+func detectPowerMethod(fields []string) string {
+	var power, current, voltage bool
+	for _, f := range fields {
+		switch f {
+		case FieldPowerNow:
+			power = true
+		case FieldCurrentNow:
+			current = true
+		case FieldVoltageNow:
+			voltage = true
+		}
+	}
+	return PowerCalculationMethod(power, current && voltage)
 }
 
 func classifyReadError(field string, err error) string {

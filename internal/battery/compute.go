@@ -5,6 +5,17 @@ import (
 	"strings"
 )
 
+const (
+	PowerMethodPowerNow       = "power_now"
+	PowerMethodCurrentVoltage = "current_voltage"
+	PowerMethodNone           = "none"
+
+	NamingEnergy = "energy"
+	NamingCharge = "charge"
+	NamingBoth   = "both"
+	NamingNone   = "none"
+)
+
 // PowerWatts returns instantaneous battery power in watts.
 //
 // Prefer power_now when present. Linux reports it as an unsigned magnitude on
@@ -44,22 +55,64 @@ func applyPowerSign(absWatts float64, currentA *float64, status string) float64 
 	return absWatts
 }
 
-// HealthPercent is energy_full / energy_full_design * 100.
-// Some packs report slightly over 100% when new; the value is not clamped.
-func HealthPercent(energyFullWh, energyFullDesignWh *float64) *float64 {
-	if energyFullWh == nil || energyFullDesignWh == nil {
+// HealthPercent is full / design * 100. It works for both energy (Wh) and
+// charge (Ah) pairs. Some packs report slightly over 100% when new; the value
+// is not clamped.
+func HealthPercent(full, design *float64) *float64 {
+	if full == nil || design == nil {
 		return nil
 	}
-	if *energyFullDesignWh == 0 || math.IsNaN(*energyFullDesignWh) || math.IsInf(*energyFullDesignWh, 0) {
+	if *design == 0 || math.IsNaN(*design) || math.IsInf(*design, 0) {
 		return nil
 	}
-	h := (*energyFullWh / *energyFullDesignWh) * 100
+	h := (*full / *design) * 100
 	if math.IsNaN(h) || math.IsInf(h, 0) {
 		return nil
 	}
 	return &h
 }
 
+// ChargeToEnergyWh converts amp-hours × volts into watt-hours.
+func ChargeToEnergyWh(chargeAh, voltageV *float64) *float64 {
+	if chargeAh == nil || voltageV == nil {
+		return nil
+	}
+	wh := *chargeAh * *voltageV
+	if math.IsNaN(wh) || math.IsInf(wh, 0) {
+		return nil
+	}
+	return &wh
+}
+
+func PowerCalculationMethod(hasPowerNow, hasCurrentVoltage bool) string {
+	switch {
+	case hasPowerNow:
+		return PowerMethodPowerNow
+	case hasCurrentVoltage:
+		return PowerMethodCurrentVoltage
+	default:
+		return PowerMethodNone
+	}
+}
+
+func NamingConvention(hasEnergy, hasCharge bool) string {
+	switch {
+	case hasEnergy && hasCharge:
+		return NamingBoth
+	case hasEnergy:
+		return NamingEnergy
+	case hasCharge:
+		return NamingCharge
+	default:
+		return NamingNone
+	}
+}
+
 func microToUnit(v int64) float64 {
 	return float64(v) / 1e6
+}
+
+// deciToUnit converts tenths (sysfs temp is typically tenths of °C) to units.
+func deciToUnit(v int64) float64 {
+	return float64(v) / 10
 }

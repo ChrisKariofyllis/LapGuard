@@ -9,14 +9,16 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
+	"lapguard/internal/discovery"
 )
 
 func TestTelemetryFromSysfsFixture(t *testing.T) {
 	p := battery.NewSysfsProvider(sysfsFixture(t), "BAT0")
-	srv := New(p, config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(p, config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/telemetry", nil)
 	rec := httptest.NewRecorder()
@@ -42,11 +44,45 @@ func TestTelemetryFromSysfsFixture(t *testing.T) {
 	if snap.Battery.HealthPercent == nil || *snap.Battery.HealthPercent != 84.2 {
 		t.Fatalf("health %+v", snap.Battery.HealthPercent)
 	}
+	if !contains(snap.AvailableFields, "energy_full") {
+		t.Fatalf("available_fields %v", snap.AvailableFields)
+	}
 }
 
 func TestCapabilitiesFromSysfsFixture(t *testing.T) {
 	p := battery.NewSysfsProvider(sysfsFixture(t), "BAT0")
-	srv := New(p, config.Config{Listen: "127.0.0.1:8585", SysfsRoot: sysfsFixture(t)}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	report := discovery.CapabilityReport{
+		Timestamp: time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC),
+		Hostname:  "fixture",
+		OS:        "Ubuntu Test",
+		Kernel:    "6.17.0-test",
+		Battery: discovery.BatteryIdentity{
+			Path:         sysfsFixture(t) + "/BAT0",
+			Name:         "BAT0",
+			Present:      true,
+			Manufacturer: "LGC",
+			Model:        "FixturePack",
+			Serial:       "TEST-BAT-001",
+			Technology:   "Li-ion",
+		},
+		AvailableFields: []string{"status", "capacity", "energy_full"},
+		Features: discovery.Features{
+			ChargeThresholds: discovery.MethodNone,
+			CycleCount:       true,
+			PowerNow:         true,
+			CurrentVoltage:   true,
+			Temperature:      true,
+		},
+		AvailableTools: discovery.Tools{TLP: true, TLPVersion: "1.8.0"},
+		KernelModules:  []string{"fujitsu_laptop"},
+		Thresholds: discovery.ThresholdPlan{
+			Method:          discovery.MethodNone,
+			DetectionMethod: "sysfs+tlp+thinkpad_acpi",
+			WhyNot:          "fujitsu_laptop is loaded but did not register charge control; TLP is installed but cannot control this hardware.",
+			Recommendation:  "Keep the pack between ~20–80% with a smart plug.",
+		},
+	}
+	srv := New(p, config.Config{Listen: "127.0.0.1:8585", SysfsRoot: sysfsFixture(t)}, slog.New(slog.NewTextHandler(io.Discard, nil)), discovery.Static{Report: report})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil)
 	rec := httptest.NewRecorder()
@@ -66,17 +102,71 @@ func TestCapabilitiesFromSysfsFixture(t *testing.T) {
 	if !body.BatteryPresent || body.BatteryName != "BAT0" {
 		t.Fatalf("battery %+v", body)
 	}
-	if body.Features.Shutdown || body.Features.Docker || body.Features.Authentication {
-		t.Fatalf("milestone 1 features must be disabled: %+v", body.Features)
+	if body.ThresholdMethod != "none" {
+		t.Fatalf("threshold_method %q", body.ThresholdMethod)
 	}
 	if len(body.AvailableFields) == 0 {
 		t.Fatal("expected available fields")
+	}
+	if len(body.Features) == 0 {
+		t.Fatal("expected feature statuses")
+	}
+	foundCharge := false
+	for _, f := range body.Features {
+		if f.Key != "charge_thresholds" {
+			continue
+		}
+		foundCharge = true
+		if f.Enabled {
+			t.Fatal("charge thresholds should be disabled on the fixture")
+		}
+		if f.DetectionMethod == "" || f.WhyNot == "" || f.Recommendation == "" {
+			t.Fatalf("charge feature incomplete: %+v", f)
+		}
+	}
+	if !foundCharge {
+		t.Fatal("missing charge_thresholds feature")
+	}
+	if !body.Tools.TLP || body.Tools.TLPVersion != "1.8.0" {
+		t.Fatalf("tools %+v", body.Tools)
+	}
+}
+
+func TestDiscoverEndpoint(t *testing.T) {
+	p := battery.NewMockProvider()
+	report := discovery.CapabilityReport{
+		Hostname: "think-test",
+		Features: discovery.Features{ChargeThresholds: discovery.MethodTLP, CycleCount: true},
+		Thresholds: discovery.ThresholdPlan{
+			Method:          discovery.MethodTLP,
+			DetectionMethod: "tlp",
+			Recommendation:  "Use TLP setcharge",
+		},
+		KernelModules: []string{"thinkpad_acpi"},
+	}
+	srv := New(p, config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), discovery.Static{Report: report})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/discover", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var body discovery.CapabilityReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Features.ChargeThresholds != "tlp" {
+		t.Fatalf("report %+v", body.Features)
+	}
+	if len(body.KernelModules) != 1 || body.KernelModules[0] != "thinkpad_acpi" {
+		t.Fatalf("modules %v", body.KernelModules)
 	}
 }
 
 func TestTelemetryWithoutBatteryIsOK(t *testing.T) {
 	p := battery.NewSysfsProvider(t.TempDir(), "BAT0")
-	srv := New(p, config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(p, config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/telemetry", nil)
 	rec := httptest.NewRecorder()
@@ -95,7 +185,7 @@ func TestTelemetryWithoutBatteryIsOK(t *testing.T) {
 }
 
 func TestMockTelemetry(t *testing.T) {
-	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/telemetry", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -105,7 +195,7 @@ func TestMockTelemetry(t *testing.T) {
 }
 
 func TestUnknownAPIIs404(t *testing.T) {
-	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/shutdown", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -121,4 +211,13 @@ func sysfsFixture(t *testing.T) string {
 		t.Fatal("caller")
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "testdata", "sysfs"))
+}
+
+func contains(list []string, want string) bool {
+	for _, v := range list {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }

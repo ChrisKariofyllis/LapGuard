@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchCapabilities, fetchTelemetry } from './lib/api';
+  import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import {
     abs,
     fmtInt,
@@ -10,7 +10,7 @@
     statusTone,
     type StatusTone,
   } from './lib/format';
-  import type { Capabilities, Telemetry } from './lib/types';
+  import type { Capabilities, Telemetry, Tools } from './lib/types';
 
   const POLL_MS = 2000;
   const THEME_KEY = 'lapguard-theme';
@@ -20,6 +20,7 @@
   let capabilities = $state<Capabilities | null>(null);
   let error = $state<string | null>(null);
   let updatedAt = $state<Date | null>(null);
+  let scanning = $state(false);
 
   const battery = $derived(telemetry?.battery);
   const present = $derived(battery?.present ?? false);
@@ -46,6 +47,18 @@
       updatedAt = new Date();
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unable to reach LapGuard';
+    }
+  }
+
+  async function rescan() {
+    scanning = true;
+    try {
+      await fetchDiscover();
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Discovery failed';
+    } finally {
+      scanning = false;
     }
   }
 
@@ -92,6 +105,16 @@
     idle: 'stroke-sky',
     missing: 'stroke-rose',
   };
+
+  function toolChips(tools: Tools | undefined): { label: string; on: boolean }[] {
+    return [
+      { label: tools?.tlp ? `TLP ${tools.tlp_version || ''}`.trim() : 'TLP', on: Boolean(tools?.tlp) },
+      { label: 'UPower', on: Boolean(tools?.upower) },
+      { label: 'ACPI', on: Boolean(tools?.acpi) },
+      { label: 'tp-smapi', on: Boolean(tools?.tp_smapi) },
+      { label: 'i8kutils', on: Boolean(tools?.i8kutils) },
+    ];
+  }
 </script>
 
 <div class="min-h-dvh px-4 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
@@ -219,26 +242,131 @@
         <p class="text-xs text-mist">Pack</p>
         <p class="mt-2 font-mono text-lg">{battery?.name ?? '—'}</p>
       </article>
+      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+        <p class="text-xs text-mist">Temperature</p>
+        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.temperature_c, 1, ' °C')}</p>
+      </article>
+      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+        <p class="text-xs text-mist">Identity</p>
+        <p class="mt-2 font-mono text-sm leading-snug">
+          {battery?.manufacturer || capabilities?.battery?.manufacturer || '—'}
+          {#if battery?.model_name || capabilities?.battery?.model}
+            <span class="text-mist"> · {battery?.model_name || capabilities?.battery?.model}</span>
+          {/if}
+        </p>
+      </article>
     </section>
 
     <section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="text-sm font-medium">Capabilities</h2>
-        <p class="font-mono text-[11px] text-mist">
-          {updatedAt ? `updated ${updatedAt.toLocaleTimeString()}` : 'waiting'}
-        </p>
+        <div>
+          <h2 class="text-sm font-medium">Capabilities</h2>
+          <p class="mt-1 text-xs text-mist">
+            Auto-discovered on this machine
+            {#if capabilities?.hostname}
+              · {capabilities.hostname}
+            {/if}
+            {#if capabilities?.os}
+              · {capabilities.os}
+            {/if}
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <p class="font-mono text-[11px] text-mist">
+            {updatedAt ? `updated ${updatedAt.toLocaleTimeString()}` : 'waiting'}
+          </p>
+          <button
+            type="button"
+            class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+            onclick={() => void rescan()}
+            disabled={scanning}
+          >
+            {scanning ? 'Scanning…' : 'Re-scan'}
+          </button>
+        </div>
       </div>
-      <p class="mt-2 text-sm text-mist">
-        Milestone 1 is read-only telemetry. Shutdown, Docker, charge thresholds, notifications and
-        authentication are not enabled.
-      </p>
-      <div class="mt-3 flex flex-wrap gap-2">
-        {#each capabilities?.available_fields ?? [] as field}
-          <span class="rounded-full bg-mint/10 px-3 py-1 font-mono text-[11px] text-mint">{field}</span>
+
+      <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
+        <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
+          thresholds: {capabilities?.threshold_method ?? '—'}
+        </span>
+        {#if capabilities?.naming_convention}
+          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
+            naming: {capabilities.naming_convention}
+          </span>
+        {/if}
+        {#if capabilities?.power_calculation}
+          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
+            power: {capabilities.power_calculation}
+          </span>
+        {/if}
+        {#if capabilities?.kernel}
+          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
+            {capabilities.kernel}
+          </span>
+        {/if}
+      </div>
+
+      <ul class="mt-4 space-y-3">
+        {#each capabilities?.features ?? [] as feature}
+          <li class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <p class="text-sm font-medium">{feature.label}</p>
+              {#if feature.enabled}
+                <span class="rounded-full bg-mint/15 px-2.5 py-0.5 font-mono text-[11px] text-mint">Enabled ✓</span>
+              {:else}
+                <span class="rounded-full bg-rose/15 px-2.5 py-0.5 font-mono text-[11px] text-rose">Not supported</span>
+              {/if}
+            </div>
+            {#if feature.method && feature.method !== 'none'}
+              <p class="mt-1 font-mono text-[11px] text-sky">method: {feature.method} · {feature.detection_method}</p>
+            {:else}
+              <p class="mt-1 font-mono text-[11px] text-mist">{feature.detection_method}</p>
+            {/if}
+            <p class="mt-1 text-sm text-mist">{feature.recommendation}</p>
+            {#if !feature.enabled && feature.why_not}
+              <p class="mt-1 text-xs text-amber">{feature.why_not}</p>
+            {/if}
+          </li>
         {/each}
-        {#each telemetry?.missing_fields ?? [] as field}
-          <span class="rounded-full bg-rose/10 px-3 py-1 font-mono text-[11px] text-rose">{field} missing</span>
-        {/each}
+      </ul>
+
+      <div class="mt-4">
+        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Tools</h3>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {#each toolChips(capabilities?.tools) as chip}
+            <span
+              class={`rounded-full px-3 py-1 font-mono text-[11px] ${chip.on ? 'bg-mint/10 text-mint' : 'bg-rose/10 text-rose'}`}
+            >
+              {chip.label}
+            </span>
+          {/each}
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Kernel modules</h3>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {#if (capabilities?.kernel_modules ?? []).length === 0}
+            <span class="text-xs text-mist">No vendor laptop modules detected</span>
+          {:else}
+            {#each capabilities?.kernel_modules ?? [] as mod}
+              <span class="rounded-full bg-sky/10 px-3 py-1 font-mono text-[11px] text-sky">{mod}</span>
+            {/each}
+          {/if}
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Sysfs fields</h3>
+        <div class="mt-2 flex flex-wrap gap-2">
+          {#each capabilities?.available_fields ?? [] as field}
+            <span class="rounded-full bg-mint/10 px-3 py-1 font-mono text-[11px] text-mint">{field}</span>
+          {/each}
+          {#each telemetry?.missing_fields ?? [] as field}
+            <span class="rounded-full bg-rose/10 px-3 py-1 font-mono text-[11px] text-rose">{field} missing</span>
+          {/each}
+        </div>
       </div>
       {#if telemetry?.warnings?.length}
         <ul class="mt-3 space-y-1 text-xs text-amber">

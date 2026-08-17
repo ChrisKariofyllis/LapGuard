@@ -13,6 +13,8 @@ import (
 	"lapguard/internal/api"
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
+	"lapguard/internal/discovery"
+	"lapguard/internal/thresholds"
 )
 
 func main() {
@@ -23,7 +25,7 @@ func main() {
 }
 
 func run(args []string) error {
-	cfg, err := config.Parse(args)
+	cfg, err := config.Load(args)
 	if err != nil {
 		return err
 	}
@@ -40,6 +42,8 @@ func run(args []string) error {
 		"listen", cfg.Listen,
 		"provider", cfg.Provider,
 		"sysfs_root", cfg.SysfsRoot,
+		"threshold_method", cfg.ThresholdMethod,
+		"config", cfg.ConfigPath,
 	)
 	if !cfg.Loopback() {
 		log.Warn("listen address is not loopback; remote access should go through Tailscale, not a public bind")
@@ -58,7 +62,44 @@ func run(args []string) error {
 		return err
 	}
 
-	app := api.New(provider, cfg, log)
+	disc := discovery.NewService(discovery.Options{
+		SysfsRoot: cfg.SysfsRoot,
+		Hostname:  "",
+		Runner:    discovery.ExecRunner(),
+	})
+	report, err := disc.Refresh(ctx)
+	if err != nil {
+		return err
+	}
+	method, warn := config.ResolveThresholdMethod(cfg.ThresholdMethod, report.Features.ChargeThresholds)
+	if warn != "" {
+		log.Warn("threshold method", "msg", warn)
+	}
+	ctrl := thresholds.New(report.Thresholds, discovery.ExecRunner())
+	log.Info("discovery complete",
+		"hostname", report.Hostname,
+		"os", report.OS,
+		"kernel", report.Kernel,
+		"battery", report.Battery.Name,
+		"present", report.Battery.Present,
+		"naming", report.NamingConvention,
+		"power", report.PowerCalculation,
+		"charge_thresholds", method,
+		"threshold_controller", ctrl.Method(),
+		"modules", report.KernelModules,
+		"tlp", report.AvailableTools.TLP,
+		"tlp_version", report.AvailableTools.TLPVersion,
+	)
+
+	if cfg.ShouldWrite() {
+		if err := cfg.Save(cfg.ConfigPath); err != nil {
+			log.Warn("could not write first-run config", "path", cfg.ConfigPath, "err", err)
+		} else {
+			log.Info("wrote first-run config", "path", cfg.ConfigPath)
+		}
+	}
+
+	app := api.New(provider, cfg, log, disc)
 	httpSrv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           app.Handler(),

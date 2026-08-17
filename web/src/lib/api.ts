@@ -1,4 +1,4 @@
-import type { Capabilities, Telemetry } from './types';
+import type { Capabilities, DiscoverReport, Telemetry } from './types';
 
 async function getJSON<T>(path: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(path, {
@@ -17,4 +17,8 @@ export function fetchTelemetry(signal?: AbortSignal): Promise<Telemetry> {
 
 export function fetchCapabilities(signal?: AbortSignal): Promise<Capabilities> {
   return getJSON<Capabilities>('/api/v1/capabilities', signal);
+}
+
+export function fetchDiscover(signal?: AbortSignal): Promise<DiscoverReport> {
+  return getJSON<DiscoverReport>('/api/v1/discover', signal);
 }

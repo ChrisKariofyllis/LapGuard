@@ -53,6 +53,7 @@ func (p *MockProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	if p.static != nil {
 		snap.Battery = *p.static
+		snap.AvailableFields = append([]string{}, TrackedFields...)
 		snap.enrich()
 		return snap, nil
 	}
@@ -71,9 +72,11 @@ func (p *MockProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 	voltage := 11.42 + 0.08*math.Sin(elapsed/40)
 	current := -1.18 + 0.12*math.Sin(elapsed/25)
 	powerNow := math.Abs(voltage * current)
+	energyNow := 28.6
 	energyFull := 42.1
 	energyDesign := 48.4
 	cycles := 214
+	temp := 31.5
 	status := "Discharging"
 	if current > 0 {
 		status = "Charging"
@@ -87,10 +90,17 @@ func (p *MockProvider) Snapshot(ctx context.Context) (Snapshot, error) {
 		VoltageNowV:        ptr(round3(voltage)),
 		CurrentNowA:        ptr(round3(current)),
 		PowerNowW:          ptr(round3(powerNow)),
+		EnergyNowWh:        ptr(energyNow),
 		EnergyFullWh:       ptr(energyFull),
 		EnergyFullDesignWh: ptr(energyDesign),
 		CycleCount:         &cycles,
+		TemperatureC:       &temp,
+		Manufacturer:       "MockCell",
+		ModelName:          "DevPack",
+		SerialNumber:       "MOCK-001",
+		Technology:         "Li-ion",
 	}
+	snap.AvailableFields = append([]string{}, TrackedFields...)
 	snap.enrich()
 	return snap, nil
 }
@@ -100,10 +110,12 @@ func (p *MockProvider) Probe(ctx context.Context) (Probe, error) {
 		return Probe{}, err
 	}
 	return Probe{
-		Kind:            p.Kind(),
-		BatteryPresent:  true,
-		BatteryName:     "BAT0",
-		AvailableFields: append([]string{}, TrackedFields...),
+		Kind:             p.Kind(),
+		BatteryPresent:   true,
+		BatteryName:      "BAT0",
+		AvailableFields:  append([]string{}, TrackedFields...),
+		NamingConvention: NamingEnergy,
+		PowerCalculation: PowerMethodPowerNow,
 	}, nil
 }
 
