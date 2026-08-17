@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --lg-ink: #f3f1eb;
+  --lg-ink-soft: #ece7dc;
+  --lg-panel: #fffdf8;
+  --lg-line: #d7d0c3;
+  --lg-mist: #66707f;
+  --lg-snow: #171b22;
+  --lg-mint: #0f8a5f;
+  --lg-amber: #b86a00;
+  --lg-rose: #c43d4e;
+  --lg-sky: #1d6ea8;
+}
+
+.dark {
+  --lg-ink: #0b0d10;
+  --lg-ink-soft: #12151b;
+  --lg-panel: #171b22;
+  --lg-line: #2a3140;
+  --lg-mist: #8b95a5;
+  --lg-snow: #e8eef6;
+  --lg-mint: #7ee0b0;
+  --lg-amber: #ffb454;
+  --lg-rose: #ff6b7a;
+  --lg-sky: #7ec8ff;
+}
+
+@theme {
+  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-ink: var(--lg-ink);
+  --color-ink-soft: var(--lg-ink-soft);
+  --color-panel: var(--lg-panel);
+  --color-line: var(--lg-line);
+  --color-mist: var(--lg-mist);
+  --color-snow: var(--lg-snow);
+  --color-mint: var(--lg-mint);
+  --color-amber: var(--lg-amber);
+  --color-rose: var(--lg-rose);
+  --color-sky: var(--lg-sky);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--lg-ink);
+  color: var(--lg-snow);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--lg-mint) 14%, transparent), transparent 55%),
+    radial-gradient(800px 400px at 100% 100%, color-mix(in srgb, var(--lg-amber) 10%, transparent), transparent 50%);
+  z-index: -2;
+}

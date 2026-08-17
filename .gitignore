@@ -1,0 +1,10 @@
+/bin/
+/web/node_modules/
+/web/dist/
+/web/.vite/
+*.exe
+*.test
+*.out
+.DS_Store
+.env
+.env.*
