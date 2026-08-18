@@ -144,8 +144,9 @@ Remote Tailscale devices  ->  open the dashboard over the tailnet
 
 Do **not** bind LapGuard to a Tailscale `100.x.y.z` address, to `0.0.0.0`, or
 to any public interface just to use Tailscale. Existing `-listen` / config
-listen flags still work; leave them on loopback. LapGuard never runs
-`tailscale` or `sudo` for you.
+listen flags still work; leave them on loopback. LapGuard never runs `sudo`
+or changes Tailscale state. `lapguard tailscale check` may run read-only
+`tailscale status` / `ip -4` / `serve status` / `version` only.
 
 ### 1. Install Tailscale separately
 
@@ -195,6 +196,24 @@ Use Tailscale ACLs to limit access to trusted users and devices.
 **Do not use Tailscale Funnel.** Do not expose port 8585 on the public
 Internet. Do not reconfigure LapGuard to listen on `0.0.0.0` for this.
 
+LapGuard includes a read-only helper that does not start the HTTP server and
+does not change Tailscale state:
+
+```bash
+lapguard tailscale instructions
+lapguard tailscale check --pretty
+```
+
+`instructions` prints the setup text only. `check` looks up `tailscale` on
+`PATH` and, if found, may run `tailscale status`, `tailscale ip -4`,
+`tailscale serve status`, and `tailscale version`. It never runs `sudo`,
+Funnel, or `tailscale serve --bg`. JSON always reports
+`lapguard_listen` as `127.0.0.1:8585` and `recommended_access` as
+`tailscale_serve`.
+
+Serve was verified on a **Gigabyte Aero 16** (dashboard opened from a phone
+on the same tailnet). That does not change the listen address.
+
 ### Security
 
 LapGuard has **no application-level authentication**. With this setup,
@@ -233,6 +252,12 @@ If Serve cannot reach the app, confirm LapGuard is still bound to
 `127.0.0.1:8585` and that you did not enable Funnel. To remove a background
 Serve config, use `tailscale serve off` (see `tailscale serve --help`).
 
+Or run the built-in probe (read-only; never executes sudo):
+
+```bash
+lapguard tailscale check --pretty
+```
+
 ## What this alpha will not do
 
 - Execute `docker stop` / `docker kill`
@@ -240,5 +265,5 @@ Serve config, use `tailscale serve off` (see `tailscale serve --help`).
 - Write charge start/stop thresholds to sysfs or via `tlp setcharge`
 - Install via a remote shell pipe
 - Bind the HTTP server to `0.0.0.0`, a Tailscale `100.x` address, or a public interface
-- Run `tailscale`, Funnel, or `sudo` on your behalf
+- Run `sudo`, Funnel, or `tailscale serve --bg` on your behalf (`lapguard tailscale check` is read-only)
 - Expose the API on a public address

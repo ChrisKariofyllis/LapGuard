@@ -31,6 +31,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "discover" {
 		return runDiscover(os.Stdout, os.Stderr, args[1:])
 	}
+	if len(args) > 0 && args[0] == "tailscale" {
+		return runTailscale(os.Stdout, os.Stderr, args[1:])
+	}
 
 	cfg, err := config.Load(args)
 	if err != nil {

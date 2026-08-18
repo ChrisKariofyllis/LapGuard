@@ -38,6 +38,7 @@ execution are out of scope for this alpha.
 - Estimated time remaining while discharging (never while charging or on AC)
 - Hardware auto-discovery: batteries, AC adapters, kernel modules, TLP/UPower
 - Privacy-safe `lapguard discover --report` export for GitHub compatibility issues
+- Read-only `lapguard tailscale instructions` / `lapguard tailscale check` for Serve setup
 - Charge-threshold **detection** (`sysfs` → `tlp` → `none`)
 - AC power-loss watcher with debounce and a local SQLite outage log
 - Optional notifications (ntfy, Telegram, Discord) — **off by default**
@@ -124,8 +125,7 @@ More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 LapGuard listens only on loopback. **Tailscale Serve** is an external reverse
 proxy in front of that local process. LapGuard does not bind to a Tailscale
-`100.x.y.z` address, does not run `tailscale` or `sudo`, and does not use
-Funnel.
+`100.x.y.z` address, does not run `sudo`, and does not configure Serve or Funnel.
 
 ```
 LapGuard                  ->  127.0.0.1:8585
@@ -189,6 +189,19 @@ ssh -L 8585:127.0.0.1:8585 user@laptop
 
 Install-oriented steps and troubleshooting are in
 [docs/install.md](docs/install.md#remote-access-with-tailscale-serve).
+
+LapGuard can print the same guidance and a privacy-safe JSON probe without
+starting the daemon or changing Tailscale state:
+
+```bash
+lapguard tailscale instructions
+lapguard tailscale check
+lapguard tailscale check --pretty
+```
+
+`check` only looks up `tailscale` on `PATH` and, if present, may run
+`tailscale status`, `tailscale ip -4`, `tailscale serve status`, and
+`tailscale version`. It never runs `sudo`, Funnel, or `tailscale serve --bg`.
 
 ### Security
 
@@ -351,8 +364,9 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 ## Layout
 
 ```
-cmd/lapguard/                # daemon + `discover --report` CLI
+cmd/lapguard/                # daemon + `discover --report` + `tailscale` CLI
 internal/discovery/          # sysfs / modules / tools / threshold detection + sanitized export
+internal/tailscale/          # read-only Tailscale Serve diagnostics
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage event log
