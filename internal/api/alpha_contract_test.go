@@ -70,8 +70,11 @@ func TestPublicAlphaContract(t *testing.T) {
 	if err := json.Unmarshal(statusRec.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
-	if status.RealEnabled || !status.SafetyDryRun || status.CommandsExecuted || status.Executor != executorRecording {
+	if status.RealEnabled || !status.SafetyDryRun || status.CommandsExecuted || status.AutomaticShutdown || status.Executor != executorRecording {
 		t.Fatalf("status %+v", status)
+	}
+	if cfg.Docker.StopEnabled {
+		t.Fatal("docker.stop_enabled must default false")
 	}
 
 	preview := httptest.NewRecorder()

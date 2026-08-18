@@ -319,7 +319,17 @@ without a token.
 Real Docker drain and host poweroff are experimental, disabled by default, and
 are **not** safe for production. Do not enable them on an important machine.
 Automatic low-battery shutdown is not implemented. This alpha does not install
-sudoers or polkit rules.
+sudoers, polkit, or root permissions.
+
+Even when `actions.real_enabled=true` and `safety.dry_run=false`, LapGuard
+runs `systemctl poweroff` / `poweroff` (and optionally the Docker CLI) as the
+service user. A normal Ubuntu/Debian user without an existing polkit or
+logind policy typically cannot power the machine off. In that case the API
+returns **503** (`action executor is unavailable`). That permission gap is
+external to LapGuard; do not add sudoers or `CAP_SYS_BOOT` to “fix” it.
+
+CI and unit/integration tests never execute host poweroff, shutdown, reboot,
+sync, or Docker. They use temporary fake executables that only record argv.
 
 `GET /api/v1/actions/status` is read-only. It reports `real_enabled`,
 `safety_dry_run`, `require_ac_loss`, AC state, battery status/percent,

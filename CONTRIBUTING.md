@@ -3,8 +3,9 @@
 LapGuard is an open-source **alpha** (v0.9.1). Automatic low-battery shutdown is
 not executed. Real Docker drain and host poweroff are experimental, disabled by
 default, and must not be enabled on an important machine. Do not add sudoers
-or polkit rules unless a maintainer explicitly asks for that work. Do not
-enable `actions.real_enabled` in tests or CI.
+or polkit rules unless a maintainer explicitly asks for that work. Tests may
+set `actions.real_enabled` only against fake executables under `t.TempDir()`.
+Do not exec host `systemctl`, `poweroff`, `docker`, or `sync` in CI.
 
 ## Development setup
 
@@ -158,7 +159,8 @@ Fixture serials in this repo are synthetic and may stay.
 - Keep tests passing (`make test` and `make lint`).
 - Do not add `curl | sudo bash` installers or unrestricted sudoers rules.
 - Do not execute Docker commands, host shutdown/reboot, or charge-threshold writes.
-- Do not enable `actions.real_enabled` or disable `safety.dry_run` in CI.
+- Do not exec host `systemctl` / `poweroff` / `docker` / `sync` in CI. Action
+  tests must stay on fake binaries in a temp directory.
 - Public tester steps: [docs/alpha-testing.md](docs/alpha-testing.md).
 - Do not log secrets. Use `internal/config` redaction helpers.
 - Match existing Go and Svelte style. Prefer small, reviewable diffs.

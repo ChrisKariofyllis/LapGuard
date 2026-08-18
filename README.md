@@ -33,15 +33,22 @@ Defaults:
 - `actions.real_enabled=false`
 - `safety.dry_run=true`
 - `safety.require_ac_loss=true`
+- `docker.stop_enabled=false`
 
 Manual `POST /api/v1/actions/poweroff` and `POST /api/v1/actions/docker-drain`
 are experimental. They stay behind authentication (when enabled), explicit
 confirmation, `actions.real_enabled=true`, `safety.dry_run=false`, a known
 disconnected AC adapter, a discharging battery, a cooldown, and an
 in-progress lock. `GET /api/v1/actions/status` reports those gates without
-executing anything. Tests never run host commands. This milestone does
-**not** add sudoers, polkit, or unrestricted root. Real Docker drain and
-host poweroff are **not** safe for production yet.
+executing anything.
+
+CI and `go test` never run host `systemctl`, `poweroff`, `docker`, or `sync`.
+Executor tests use temporary fake binaries that record argv and do not
+touch the machine. LapGuard does **not** install sudoers, polkit, or root
+permissions. A normal user may get **503** `action executor is unavailable`
+after the gates pass, because OS permission to power off or talk to Docker
+is outside this project. Real Docker drain and host poweroff are **not**
+safe for production yet.
 
 > **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
 
@@ -51,7 +58,9 @@ host poweroff are **not** safe for production yet.
 - Charge-threshold **writes are not wired**.
 - Automatic low-battery shutdown is **not implemented**.
 - Manual Docker drain and poweroff exist but stay **disabled** (`real_enabled=false`, `dry_run=true`).
-- Not production-safe; no sudoers/polkit; no UPS support.
+- CI tests the real executor only against temp-dir fakes; it never powers off the host.
+- Not production-safe; no sudoers/polkit; no UPS support. OS poweroff permission is
+  external — a normal user may see HTTP 503 after the software gates pass.
 
 Public alpha testers: follow [docs/alpha-testing.md](docs/alpha-testing.md)
 (`make smoke` never enables real actions).
@@ -280,11 +289,13 @@ the old token). Then generate a new one.
   Use `lapguard discover --report` (not raw API JSON) when sharing a
   compatibility report.
 - The process should not run as root for alpha. The systemd templates do
-  not grant sudo or `CAP_SYS_BOOT`.
+  not grant sudo or `CAP_SYS_BOOT`. LapGuard does not install sudoers or
+  polkit rules. After every software gate passes, `systemctl poweroff` /
+  `poweroff` still need OS permission; without it the API returns **503**.
 - Dry-run safety means a low battery will **not** automatically stop
   workloads or power off the machine. Real actions stay disabled until you
   set `actions.real_enabled=true` and `safety.dry_run=false`. Do not do that
-  on an important machine.
+  on an important machine. CI never enables those flags against the host.
 
 ## Compatibility reports
 
