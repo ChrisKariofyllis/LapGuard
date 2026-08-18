@@ -126,7 +126,8 @@ Verified capabilities:
 - `raw_power_now_supported`: **false**
 - `derived_power_supported`: **true** — power calculation is `current_now * voltage_now`
 - Watts are pack charge/discharge power, not total system consumption
-- Derived battery-side power and estimated runtime work
+- Derived battery-side power and estimated runtime work. Estimated runtime is
+  available **only while discharging**, never while charging or on AC.
 - LapGuard derives energy (Wh) from charge (Ah) × voltage where those fields exist (`charge_*` × `voltage_now`)
 - Charge-threshold method: **none**. Charge-control sysfs attributes are not present, so thresholds are not writable on this tested Aero 16. That is a fact about this machine, not a claim that ASUS/Gigabyte charge limits are generally unsupported.
 - `asus_wmi` is loaded

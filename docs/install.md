@@ -226,10 +226,23 @@ on the same tailnet). That does not change the listen address.
 
 ### Security
 
-LapGuard has **no application-level authentication**. With this setup,
-**Tailscale identity and ACLs are the security boundary**. Only trusted
-Tailscale users and devices should be allowed to reach the dashboard. Do not
-use Funnel or any other public Internet exposure.
+When `auth.enabled` is **false** (the default), LapGuard has **no application-level
+authentication**. Anyone who can reach the HTTP port can change settings.
+Enable a Bearer token **before** exposing the dashboard over Tailscale:
+
+```bash
+lapguard auth generate
+```
+
+Store the printed token in a password manager. Send `Authorization: Bearer <token>`
+on POST/PUT. GET telemetry stays readable without a token in this alpha.
+
+With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are the
+security boundary. Only trusted tailnet users and devices should be allowed.
+**Do not use Tailscale Funnel.** Do not expose port 8585 on the public Internet.
+
+Tester steps (checksum, localhost, Serve, ntfy, preview) are in
+[alpha-testing.md](alpha-testing.md).
 
 ### Troubleshooting
 
@@ -287,8 +300,9 @@ keeps working. Enable a Bearer token before Tailscale Serve:
 5. Configure Tailscale Serve as above. Do **not** use Funnel or expose
    port 8585 publicly.
 6. Send `Authorization: Bearer <token>` on POST/PUT (settings, notification
-   test, safety simulation). GET telemetry stays readable without a token
-   in this alpha.
+   test, safety simulation, action preview). GET telemetry, capabilities,
+   discover, power, events, safety, healthz, config, auth/status, and
+   actions/status stay readable without a token in this alpha.
 
 Rotate or recover without the old token (local config file access):
 
@@ -311,6 +325,9 @@ sudoers or polkit rules.
 `safety_dry_run`, `require_ac_loss`, AC state, battery status/percent,
 cooldown, and whether the recording or real executor would be selected.
 It never exposes command arguments or secrets.
+
+Public alpha testers should use [alpha-testing.md](alpha-testing.md).
+`make smoke` / `scripts/smoke-test.sh` never enables real actions.
 
 ## What this alpha will not do
 

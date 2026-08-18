@@ -1,9 +1,10 @@
 # Contributing to LapGuard
 
-LapGuard is an open-source **alpha**. Automatic low-battery shutdown is not
-executed. Real Docker drain and host poweroff are experimental, disabled by
+LapGuard is an open-source **alpha** (v0.9.1). Automatic low-battery shutdown is
+not executed. Real Docker drain and host poweroff are experimental, disabled by
 default, and must not be enabled on an important machine. Do not add sudoers
-or polkit rules unless a maintainer explicitly asks for that work.
+or polkit rules unless a maintainer explicitly asks for that work. Do not
+enable `actions.real_enabled` in tests or CI.
 
 ## Development setup
 
@@ -51,6 +52,7 @@ make build
 | --- | --- |
 | `make test` | `go test ./...` |
 | `make lint` | fail if `gofmt -l .` is non-empty, then `go vet ./...` |
+| `make smoke` | local mock HTTP smoke test (`scripts/smoke-test.sh`; never enables real actions) |
 | `make build-web` | `npm ci` and Vite production build |
 | `make build` | frontend + `go build -tags embedui` (version: git tag or `dev`) |
 | `make release-build` | linux-amd64 and linux-arm64 plus `SHA256SUMS` |
@@ -156,5 +158,7 @@ Fixture serials in this repo are synthetic and may stay.
 - Keep tests passing (`make test` and `make lint`).
 - Do not add `curl | sudo bash` installers or unrestricted sudoers rules.
 - Do not execute Docker commands, host shutdown/reboot, or charge-threshold writes.
+- Do not enable `actions.real_enabled` or disable `safety.dry_run` in CI.
+- Public tester steps: [docs/alpha-testing.md](docs/alpha-testing.md).
 - Do not log secrets. Use `internal/config` redaction helpers.
 - Match existing Go and Svelte style. Prefer small, reviewable diffs.

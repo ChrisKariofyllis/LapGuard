@@ -155,6 +155,50 @@ tp-smapi   = inactive (unsupported hardware)
 			whyContains:     "fujitsu_laptop",
 		},
 		{
+			name: "gigabyte-aero16",
+			setup: func(t *testing.T, root string) Options {
+				// Verified Aero 16 on Zorin OS: charge_* on BAT1, asus_wmi, no power_now/temp/charge_control_*.
+				writeBattery(t, root, "BAT1", map[string]string{
+					"type":               "Battery",
+					"present":            "1",
+					"status":             "Discharging",
+					"capacity":           "61",
+					"capacity_level":     "Normal",
+					"charge_now":         "1848000",
+					"charge_full":        "3030000",
+					"charge_full_design": "3200000",
+					"voltage_now":        "11220000",
+					"current_now":        "-1205000",
+					"cycle_count":        "88",
+					"alarm":              "0",
+					"manufacturer":       "Gigabyte",
+					"model_name":         "FixturePack",
+					"technology":         "Li-ion",
+				})
+				writeSupply(t, root, "ADP1", map[string]string{"type": "Mains", "online": "0"})
+				writeModules(t, root, "asus_wmi")
+				return optsFor(t, root, fakeRunner{
+					bins:    map[string]string{"tlp": "/usr/sbin/tlp", "tlp-stat": "/usr/bin/tlp-stat"},
+					version: "1.6.1",
+					stat: `--- TLP 1.6.1 --------------------------------------------
++++ Charge Thresholds
+NATACPI    = inactive (unsupported hardware)
+tpacpi-bat = inactive (kernel module 'acpi_call' not installed)
+tp-smapi   = inactive (unsupported hardware)
+`,
+				})
+			},
+			wantMethod:      MethodNone,
+			wantModules:     []string{"asus_wmi"},
+			wantTLP:         true,
+			wantTLPCanSet:   false,
+			wantCycle:       true,
+			wantPowerNow:    false,
+			wantCurrentVolt: true,
+			wantNaming:      "charge",
+			whyContains:     "ASUS WMI",
+		},
+		{
 			name: "asus",
 			setup: func(t *testing.T, root string) Options {
 				writeBattery(t, root, "BAT0", map[string]string{
@@ -314,6 +358,40 @@ tp-smapi   = inactive (unsupported hardware)
 				}
 				if !foundNote {
 					t.Fatalf("expected fujitsu charge-control note, got %v", report.Notes)
+				}
+			}
+			if tc.name == "gigabyte-aero16" {
+				if report.Battery.Name != "BAT1" {
+					t.Fatalf("aero16 battery name %q, want BAT1", report.Battery.Name)
+				}
+				if report.Features.Temperature {
+					t.Fatal("aero16 does not expose sysfs temp")
+				}
+				if report.Features.RawPowerNowSupported || report.Features.PowerNow {
+					t.Fatal("aero16 does not expose power_now")
+				}
+				if !report.Features.DerivedPowerSupported {
+					t.Fatal("aero16 should derive power from current_now × voltage_now")
+				}
+				if report.PowerCalculation != "current_voltage" {
+					t.Fatalf("aero16 power method %q, want current_voltage", report.PowerCalculation)
+				}
+				if report.Features.ChargeThresholds != MethodNone {
+					t.Fatalf("aero16 thresholds %q, want none", report.Features.ChargeThresholds)
+				}
+				if !moduleLoaded(report.KernelModules, "asus_wmi") {
+					t.Fatalf("aero16 missing asus_wmi in %v", report.KernelModules)
+				}
+				if !report.AvailableTools.TLP || report.AvailableTools.TLPCanSet {
+					t.Fatalf("aero16 tlp=%v can_set=%v", report.AvailableTools.TLP, report.AvailableTools.TLPCanSet)
+				}
+				if report.AvailableTools.TLPVersion != "1.6.1" {
+					t.Fatalf("aero16 tlp version %q", report.AvailableTools.TLPVersion)
+				}
+				for _, field := range []string{"power_now", "temp", "charge_control_start_threshold", "charge_control_end_threshold"} {
+					if hasField(report.AvailableFields, field) {
+						t.Fatalf("aero16 unexpectedly has %s: %v", field, report.AvailableFields)
+					}
 				}
 			}
 			if tc.name == "thinkpad" && report.Thresholds.DetectionMethod != "sysfs_native" {

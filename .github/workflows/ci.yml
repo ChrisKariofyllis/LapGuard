@@ -44,3 +44,6 @@ jobs:
 
       - name: Confirm linux/amd64 binary
         run: sh ./scripts/ci-verify-binary.sh
+
+      - name: Public alpha smoke test
+        run: sh ./scripts/smoke-test.sh bin/lapguard

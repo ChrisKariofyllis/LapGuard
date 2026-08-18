@@ -45,6 +45,17 @@ host poweroff are **not** safe for production yet.
 
 > **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
 
+### v0.9.1-alpha limitations
+
+- Optional Bearer auth; GET routes stay readable when auth is on.
+- Charge-threshold **writes are not wired**.
+- Automatic low-battery shutdown is **not implemented**.
+- Manual Docker drain and poweroff exist but stay **disabled** (`real_enabled=false`, `dry_run=true`).
+- Not production-safe; no sudoers/polkit; no UPS support.
+
+Public alpha testers: follow [docs/alpha-testing.md](docs/alpha-testing.md)
+(`make smoke` never enables real actions).
+
 ## Current features
 
 - Battery telemetry from sysfs (`energy_*` and `charge_*`), with **battery-side**
@@ -116,6 +127,7 @@ export PATH="$HOME/.local/go/bin:$HOME/.local/node/bin:$PATH"
 
 make test          # go test ./...
 make lint          # gofmt + go vet
+make smoke         # local mock smoke test (never enables real actions)
 make build-web     # Svelte production build
 make build         # embed UI; version is "dev" or a clean git tag (override with VERSION=…)
 make release-build # linux-amd64 + linux-arm64 + SHA256SUMS
@@ -242,8 +254,8 @@ SHA-256 hash is written to `config.json` (mode `0600`). Send it as
 `Authorization: Bearer <token>` on POST/PUT. Do not put tokens in URLs.
 
 GET telemetry, capabilities, discover, power, events, safety, healthz,
-config, and auth/status stay readable without a token in this alpha.
-Protecting GET is reserved for a later release.
+config, auth/status, and actions/status stay readable without a token in this
+alpha. Protecting GET is reserved for a later release.
 
 With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are
 the security boundary. Only trusted tailnet users/devices should be allowed.
