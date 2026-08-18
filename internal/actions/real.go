@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -24,7 +25,17 @@ func (e *RealExecutor) StopDocker(ctx context.Context) error {
 	}
 	ids := parseContainerIDs(out)
 	for _, id := range ids {
-		if out, err := e.run(ctx, timeout, docker, "stop", id); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		left := timeout
+		if deadline, ok := ctx.Deadline(); ok {
+			left = time.Until(deadline)
+			if left <= 0 {
+				return context.DeadlineExceeded
+			}
+		}
+		if out, err := e.run(ctx, left, docker, "stop", id); err != nil {
 			return wrapCmdErr("docker stop", out, err)
 		}
 	}
@@ -62,7 +73,10 @@ func wrapCmdErr(op string, out []byte, err error) error {
 		return nil
 	}
 	_ = redactOutput(out)
-	return fmt.Errorf("%s: %w", op, err)
+	if errors.Is(err, ErrRefusedInTest) || errors.Is(err, ErrUnavailable) || errors.Is(err, ErrUnsafeArgs) {
+		return err
+	}
+	return fmt.Errorf("%s: %w", op, ErrUnavailable)
 }
 
 func (e *RealExecutor) dockerBin() (string, error) {
@@ -96,7 +110,7 @@ func (e *RealExecutor) powerOffArgv() (string, []string, error) {
 	if path, err := e.look("poweroff"); err == nil {
 		return path, nil, nil
 	}
-	return "", nil, fmt.Errorf("poweroff executable not found")
+	return "", nil, fmt.Errorf("%w: poweroff executable not found", ErrUnavailable)
 }
 
 func baseName(path string) string {

@@ -148,6 +148,9 @@ type ActionsPatch struct {
 }
 
 func (a ActionsConfig) Apply(p ActionsPatch) (ActionsConfig, error) {
+	if p.PowerOffPath != nil || p.DockerPath != nil || p.SyncPath != nil {
+		return ActionsConfig{}, invalidConfig("executable paths cannot be set over HTTP")
+	}
 	out := a
 	if p.RealEnabled != nil {
 		out.RealEnabled = *p.RealEnabled
@@ -157,15 +160,6 @@ func (a ActionsConfig) Apply(p ActionsPatch) (ActionsConfig, error) {
 	}
 	if p.CooldownSeconds != nil {
 		out.CooldownSeconds = *p.CooldownSeconds
-	}
-	if p.PowerOffPath != nil {
-		out.PowerOffPath = *p.PowerOffPath
-	}
-	if p.DockerPath != nil {
-		out.DockerPath = *p.DockerPath
-	}
-	if p.SyncPath != nil {
-		out.SyncPath = *p.SyncPath
 	}
 	if p.PowerOffTimeoutSecs != nil {
 		out.PowerOffTimeoutSecs = *p.PowerOffTimeoutSecs

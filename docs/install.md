@@ -4,10 +4,15 @@ LapGuard is a local daemon. There is no `curl | sudo bash` installer and no
 sudoers file.
 
 > **Warning:** Real actions (Docker drain and host poweroff) are experimental
-> and **disabled by default**. Do not enable them on an important machine.
-> This alpha remains dry-run unless you explicitly set
-> `actions.real_enabled=true` and `safety.dry_run=false`. Automatic
-> low-battery shutdown is still not executed.
+> and **disabled by default**. They are not safe for production yet. Do not
+> enable them on an important machine. This alpha remains dry-run unless you
+> explicitly set `actions.real_enabled=true` and `safety.dry_run=false`.
+> Automatic low-battery shutdown is **not implemented**.
+>
+> Even then, a request must pass authentication (when enabled), exact
+> confirmation (`POWER_OFF` / `STOP_DOCKER`), known AC-disconnected state, a
+> discharging battery, cooldown, and an in-progress lock.
+> `GET /api/v1/actions/status` reports those gates without running commands.
 
 Charge-threshold writes are **not** performed. Prefer the **user systemd unit**
 for alpha. The system unit is for machines that should run LapGuard without a
@@ -298,14 +303,22 @@ HTTP requires a valid Bearer token when auth is on, or a loopback request to
 without a token.
 
 Real Docker drain and host poweroff are experimental, disabled by default, and
-must not be enabled on an important machine. Automatic low-battery shutdown is
-not executed. This alpha does not install sudoers or polkit rules.
+are **not** safe for production. Do not enable them on an important machine.
+Automatic low-battery shutdown is not implemented. This alpha does not install
+sudoers or polkit rules.
+
+`GET /api/v1/actions/status` is read-only. It reports `real_enabled`,
+`safety_dry_run`, `require_ac_loss`, AC state, battery status/percent,
+cooldown, and whether the recording or real executor would be selected.
+It never exposes command arguments or secrets.
 
 ## What this alpha will not do
 
 - Automatically stop Docker or power off the host on low battery
-- Execute real actions unless `actions.real_enabled=true` **and**
-  `safety.dry_run=false` **and** the caller sends explicit confirmation
+- Execute real actions unless every safety gate passes (`actions.real_enabled=true`,
+  `safety.dry_run=false`, explicit confirmation, AC disconnected, battery
+  discharging, cooldown clear)
+- Treat Docker drain or host poweroff as production-safe
 - Write charge start/stop thresholds to sysfs or via `tlp setcharge`
 - Install via a remote shell pipe
 - Bind the HTTP server to `0.0.0.0`, a Tailscale `100.x` address, or a public interface

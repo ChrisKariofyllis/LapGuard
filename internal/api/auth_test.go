@@ -94,6 +94,7 @@ func TestGETTelemetryReadableWhenAuthEnabled(t *testing.T) {
 		"/api/v1/safety",
 		"/api/v1/healthz",
 		"/api/v1/auth/status",
+		"/api/v1/actions/status",
 		"/api/v1/config",
 	} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)

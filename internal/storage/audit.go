@@ -186,7 +186,7 @@ func sanitizeEndpoint(path string) string {
 func sanitizeAuditText(s string) string {
 	s = strings.TrimSpace(s)
 	lower := strings.ToLower(s)
-	for _, needle := range []string{"authorization", "bearer ", "webhook", "chat_id", "password", "token_hash", "serial"} {
+	for _, needle := range []string{"authorization", "bearer ", "webhook", "chat_id", "password", "token_hash", "serial", "idempotency"} {
 		if strings.Contains(lower, needle) {
 			return "redacted"
 		}

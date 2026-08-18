@@ -16,7 +16,7 @@ import (
 var (
 	ErrRefusedInTest = errors.New("real host commands are disabled during tests")
 	ErrUnsafeArgs    = errors.New("refusing unsafe command arguments")
-	ErrEmptyID       = errors.New("container id is empty")
+	ErrUnavailable   = errors.New("action executor is unavailable")
 )
 
 // Runner executes one argv. Tests inject fakes. Production uses exec.CommandContext.
@@ -58,10 +58,10 @@ func (e *RealExecutor) look(file string) (string, error) {
 	}
 	path, err := lp(file)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %s", ErrUnavailable, file)
 	}
 	if !filepath.IsAbs(path) {
-		return "", fmt.Errorf("resolved path for %s is not absolute", file)
+		return "", fmt.Errorf("%w: resolved path for %s is not absolute", ErrUnavailable, file)
 	}
 	return path, nil
 }
@@ -96,6 +96,20 @@ func validateArgv(name string, args []string) error {
 		return ErrUnsafeArgs
 	}
 	if base == "systemctl" && (len(args) != 1 || args[0] != "poweroff") {
+		return ErrUnsafeArgs
+	}
+	if base == "docker" {
+		switch {
+		case len(args) == 2 && args[0] == "ps" && args[1] == "-q":
+		case len(args) == 2 && args[0] == "stop" && validContainerID(args[1]):
+		default:
+			return ErrUnsafeArgs
+		}
+	}
+	if base == "sync" && len(args) != 0 {
+		return ErrUnsafeArgs
+	}
+	if base == "poweroff" && len(args) != 0 {
 		return ErrUnsafeArgs
 	}
 	for _, a := range args {

@@ -35,9 +35,13 @@ Defaults:
 - `safety.require_ac_loss=true`
 
 Manual `POST /api/v1/actions/poweroff` and `POST /api/v1/actions/docker-drain`
-exist behind those gates, authentication, explicit confirmation, AC checks
-(for poweroff), audit events, and a cooldown. Tests never run host commands.
-This milestone does **not** add sudoers, polkit, or unrestricted root.
+are experimental. They stay behind authentication (when enabled), explicit
+confirmation, `actions.real_enabled=true`, `safety.dry_run=false`, a known
+disconnected AC adapter, a discharging battery, a cooldown, and an
+in-progress lock. `GET /api/v1/actions/status` reports those gates without
+executing anything. Tests never run host commands. This milestone does
+**not** add sudoers, polkit, or unrestricted root. Real Docker drain and
+host poweroff are **not** safe for production yet.
 
 > **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
 
@@ -395,8 +399,9 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
 | POST | `/api/v1/actions/test-notification` | Test message (enabled provider required) |
 | POST | `/api/v1/actions/preview` | Intended plan only (`commands_executed=false`) |
-| POST | `/api/v1/actions/poweroff` | Manual poweroff (disabled by default; confirm `POWER_OFF`) |
-| POST | `/api/v1/actions/docker-drain` | Manual Docker drain (disabled by default; confirm `STOP_DOCKER`) |
+| GET | `/api/v1/actions/status` | Read-only gates: AC, battery, cooldown, executor type (`recording`/`real`) |
+| POST | `/api/v1/actions/poweroff` | Manual poweroff (experimental; confirm `POWER_OFF`) |
+| POST | `/api/v1/actions/docker-drain` | Manual Docker drain (experimental; confirm `STOP_DOCKER`) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
 | POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run) |
 | GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version`, `auth_enabled` |
@@ -407,9 +412,15 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 `GET /api/v1/config` omits secret values and sets `webhook_configured` /
 `chat_id_configured`, `auth_enabled`, and `token_configured`. It never returns
 `token_hash`, the plaintext token, or host command strings.
-`execution.shutdown` and `execution.docker` are `disabled` by default.
-When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`. GET routes
-listed above stay readable.
+`GET /api/v1/actions/status` never returns command arguments, executable
+paths, or secrets. `execution.shutdown` and `execution.docker` are `disabled`
+by default. When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`.
+GET routes listed above stay readable.
+
+Manual poweroff and Docker drain are **not** production-ready. Automatic
+low-battery shutdown is **not implemented**. Optional `Idempotency-Key` on
+those POSTs is hashed in memory and rejected as a duplicate during the
+cooldown window.
 
 ## Layout
 

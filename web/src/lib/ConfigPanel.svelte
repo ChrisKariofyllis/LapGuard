@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
+  import { fetchActionStatus, fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
   import type { ActionsConfig, AppConfig, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
 
   let loading = $state(true);
@@ -17,6 +17,8 @@
   let webhookConfigured = $state(false);
   let chatConfigured = $state(false);
   let powerSource = $state<'AC' | 'BATTERY' | 'UNKNOWN'>('UNKNOWN');
+  let discharging = $state(false);
+  let cooldownActive = $state(false);
   let acting = $state(false);
   let modal = $state<null | 'poweroff' | 'docker'>(null);
   let confirmText = $state('');
@@ -74,8 +76,8 @@
     plan.push('sync', 'poweroff');
     return plan;
   });
-  const poweroffReady = $derived(actions.ready && powerSource === 'BATTERY');
-  const dockerReady = $derived(actions.ready);
+  const poweroffReady = $derived(actions.ready && powerSource === 'BATTERY' && discharging && !cooldownActive);
+  const dockerReady = $derived(actions.ready && powerSource === 'BATTERY' && discharging && !cooldownActive);
   const confirmWord = $derived(modal === 'docker' ? 'STOP_DOCKER' : 'POWER_OFF');
 
   function planLabel(step: string): string {
@@ -99,6 +101,14 @@
         return 'Safety dry-run is on';
       case 'confirmation_required':
         return 'Confirmation required';
+      case 'ac_connected':
+        return 'AC is connected';
+      case 'ac_unknown':
+        return 'AC state is unknown';
+      case 'battery_not_discharging':
+        return 'Battery is not discharging';
+      case 'cooldown_active':
+        return 'Cooldown is active';
       default:
         return gate.replaceAll('_', ' ');
     }
@@ -140,9 +150,11 @@
   async function load() {
     loading = true;
     try {
-      const [cfg, power] = await Promise.all([fetchConfig(), fetchPower()]);
+      const [cfg, power, status] = await Promise.all([fetchConfig(), fetchPower(), fetchActionStatus()]);
       applyView(cfg);
       powerSource = power.source;
+      discharging = status.discharging;
+      cooldownActive = Boolean(status.cooldown?.active || status.cooldown?.in_progress);
       error = null;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unable to load configuration';
@@ -236,9 +248,11 @@
   onMount(() => {
     void load();
     const id = window.setInterval(() => {
-      void fetchPower()
-        .then((power) => {
-          powerSource = power.source;
+      void fetchActionStatus()
+        .then((status) => {
+          powerSource = (status.ac_state as 'AC' | 'BATTERY' | 'UNKNOWN') || powerSource;
+          discharging = status.discharging;
+          cooldownActive = Boolean(status.cooldown?.active || status.cooldown?.in_progress);
         })
         .catch(() => {
           /* keep last known source */

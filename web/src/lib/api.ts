@@ -1,4 +1,4 @@
-import type { ActionResult, AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
+import type { ActionResult, ActionStatus, AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
 import { authHeaders } from './auth';
 
 async function readError(path: string, res: Response): Promise<string> {
@@ -163,6 +163,10 @@ export async function testSafety(scenario: 'warning' | 'critical'): Promise<Safe
     };
   }
   return body;
+}
+
+export function fetchActionStatus(signal?: AbortSignal): Promise<ActionStatus> {
+  return getJSON<ActionStatus>('/api/v1/actions/status', signal);
 }
 
 export function previewActions(): Promise<ActionResult> {

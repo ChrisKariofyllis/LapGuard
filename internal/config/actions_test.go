@@ -37,27 +37,38 @@ func TestRequireConfirmationCannotBeDisabled(t *testing.T) {
 	}
 }
 
-func TestActionsRejectsUnsafePaths(t *testing.T) {
+func TestHTTPActionsPatchRejectsExecPaths(t *testing.T) {
 	a := DefaultActions()
-	rel := "systemctl"
-	if _, err := a.Apply(ActionsPatch{PowerOffPath: &rel}); err == nil {
+	ok := "/usr/bin/systemctl"
+	if _, err := a.Apply(ActionsPatch{PowerOffPath: &ok}); err == nil {
+		t.Fatal("HTTP must not accept poweroff_path")
+	}
+	docker := "/usr/bin/docker"
+	if _, err := a.Apply(ActionsPatch{DockerPath: &docker}); err == nil {
+		t.Fatal("HTTP must not accept docker_path")
+	}
+}
+
+func TestNormalizeValidatesExecPaths(t *testing.T) {
+	a := DefaultActions()
+	a.PowerOffPath = "systemctl"
+	if err := a.normalize(); err == nil {
 		t.Fatal("relative poweroff_path should fail")
 	}
-	shell := "/usr/bin/systemctl;reboot"
-	if _, err := a.Apply(ActionsPatch{PowerOffPath: &shell}); err == nil {
+	a = DefaultActions()
+	a.PowerOffPath = "/usr/bin/systemctl;reboot"
+	if err := a.normalize(); err == nil {
 		t.Fatal("metacharacters should fail")
 	}
-	bad := "/usr/bin/reboot"
-	if _, err := a.Apply(ActionsPatch{PowerOffPath: &bad}); err == nil {
+	a = DefaultActions()
+	a.PowerOffPath = "/usr/bin/reboot"
+	if err := a.normalize(); err == nil {
 		t.Fatal("reboot basename should fail")
 	}
-	ok := "/usr/bin/systemctl"
-	out, err := a.Apply(ActionsPatch{PowerOffPath: &ok})
-	if err != nil {
+	a = DefaultActions()
+	a.PowerOffPath = "/usr/bin/systemctl"
+	if err := a.normalize(); err != nil {
 		t.Fatal(err)
-	}
-	if out.PowerOffPath != ok {
-		t.Fatalf("path %q", out.PowerOffPath)
 	}
 }
 

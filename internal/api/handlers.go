@@ -33,15 +33,17 @@ type Server struct {
 	mu  sync.RWMutex
 	cfg config.Config
 
-	watcher    *power.Watcher
-	events     *storage.Store
-	notifier   *notify.Service
-	safety     *safety.Controller
-	rec        *safety.RecordingExecutor
-	realRun    actions.Runner
-	testActor  safety.ActionExecutor
-	testSource *power.Source
-	guard      actionGuard
+	watcher     *power.Watcher
+	events      *storage.Store
+	notifier    *notify.Service
+	safety      *safety.Controller
+	rec         *safety.RecordingExecutor
+	realRun     actions.Runner
+	testActor   safety.ActionExecutor
+	testSource  *power.Source
+	testBattery *batteryReading
+	nowFn       func() time.Time
+	guard       actionGuard
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
@@ -127,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/actions/preview", s.secureWrite(s.handleActionPreview))
 	mux.HandleFunc("POST /api/v1/actions/poweroff", s.secureWrite(s.handleActionPowerOff))
 	mux.HandleFunc("POST /api/v1/actions/docker-drain", s.secureWrite(s.handleActionDockerDrain))
+	mux.HandleFunc("GET /api/v1/actions/status", s.handleActionStatus)
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)

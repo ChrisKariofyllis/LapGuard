@@ -34,10 +34,43 @@ func TestValidateArgvRejectsShell(t *testing.T) {
 	}
 }
 
+func TestParseContainerIDsEmpty(t *testing.T) {
+	if got := parseContainerIDs(nil); len(got) != 0 {
+		t.Fatalf("%v", got)
+	}
+}
+
 func TestParseContainerIDs(t *testing.T) {
 	got := parseContainerIDs([]byte("abc123def456\nnot valid!\n0123456789ab\n"))
 	if len(got) != 2 || got[0] != "abc123def456" || got[1] != "0123456789ab" {
 		t.Fatalf("%v", got)
+	}
+}
+
+func TestStopDockerNoContainers(t *testing.T) {
+	var calls [][]string
+	ex := &RealExecutor{
+		DockerPath: "/usr/bin/docker",
+		DockerTO:   time.Second,
+		Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			calls = append(calls, append([]string{name}, args...))
+			return []byte("\n"), nil
+		},
+	}
+	if err := ex.StopDocker(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 || strings.Join(calls[0], " ") != "/usr/bin/docker ps -q" {
+		t.Fatalf("calls %v", calls)
+	}
+}
+
+func TestValidateArgvRejectsDockerShell(t *testing.T) {
+	if err := validateArgv("/usr/bin/docker", []string{"stop", "$(docker ps -q)"}); err == nil {
+		t.Fatal("expected reject")
+	}
+	if err := validateArgv("/usr/bin/docker", []string{"kill", "aaaaaaaaaaaa"}); err == nil {
+		t.Fatal("kill must be rejected")
 	}
 }
 

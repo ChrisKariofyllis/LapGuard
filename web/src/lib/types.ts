@@ -219,6 +219,28 @@ export type ActionResult = {
   detail?: string;
 };
 
+export type ActionStatus = {
+  real_enabled: boolean;
+  safety_dry_run: boolean;
+  require_ac_loss: boolean;
+  ac_state: 'AC' | 'BATTERY' | 'UNKNOWN' | string;
+  battery_status: string;
+  battery_percent?: number | null;
+  discharging: boolean;
+  cooldown: {
+    active: boolean;
+    in_progress: boolean;
+    seconds_remaining: number;
+  };
+  executor: 'recording' | 'real' | string;
+  commands_executed: boolean;
+  ready: boolean;
+  gates: string[];
+  warnings: string[];
+  automatic_shutdown_executed?: boolean;
+  plan?: string[];
+};
+
 export type PowerAdapter = {
   name: string;
   type: string;
