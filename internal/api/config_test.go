@@ -40,6 +40,9 @@ func TestGetConfig(t *testing.T) {
 	if body.Execution.Shutdown != config.ExecutionStoredOnly {
 		t.Fatalf("execution %+v", body.Execution)
 	}
+	if body.Execution.Docker != config.ExecutionStoredOnly {
+		t.Fatalf("docker execution %+v", body.Execution)
+	}
 	if body.Execution.Notifications != config.ExecutionUnconfigured {
 		t.Fatalf("notifications execution %+v", body.Execution)
 	}
@@ -70,6 +73,9 @@ func TestPutConfig(t *testing.T) {
 	}
 	if body.Execution.Shutdown != config.ExecutionStoredOnly {
 		t.Fatal("PUT must not claim shutdown is implemented")
+	}
+	if body.Execution.Docker != config.ExecutionStoredOnly {
+		t.Fatal("PUT must not claim Docker stop is implemented")
 	}
 	if body.Execution.Notifications != config.ExecutionDisabled {
 		t.Fatalf("configured but disabled notifications: %+v", body.Execution)

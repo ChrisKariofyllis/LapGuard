@@ -5,13 +5,14 @@ only when the corresponding sysfs files, kernel modules, or userspace tools are
 present. Missing hardware is not an error: the capability is marked `none` with a
 `why_not` explanation.
 
-Charge-threshold method preference:
+Charge-threshold **detection** preference (LapGuard does **not** write limits
+in this alpha):
 
 1. **sysfs** — `charge_control_start_threshold` / `charge_control_end_threshold`
    (or the older ThinkPad `charge_start_threshold` / `charge_stop_threshold` names,
    including `/sys/devices/platform/thinkpad_acpi/`)
-2. **tlp** — `tlp-stat` reports an active start/stop backend; writes use
-   `tlp setcharge START STOP BATX`
+2. **tlp** — `tlp-stat` reports an active start/stop backend (TLP itself would
+   write with `tlp setcharge START STOP BATX`; LapGuard only detects this)
 3. **none** — no writable firmware limit
 
 ## Power readings
@@ -125,7 +126,7 @@ Do not record battery serial numbers, webhook URLs, tokens, passwords, usernames
 
 1. On the machine, run `lapguard discover --report > lapguard-compatibility-report.json` (add `--pretty` to indent).
 2. Confirm `features.charge_thresholds` is `sysfs`, `tlp`, or `none`.
-3. Record `raw_power_now_supported` vs `derived_power_supported` (absence of `power_now` is not a failure if current×voltage works).
+3. Record `raw_power_now_supported` vs `derived_power_supported` (absence of `power_now` is not a failure if current×voltage works). Record `power_direction` / `battery_power_w` if you are describing charging vs discharge watts.
 4. Record the battery naming convention (`energy` / `charge` / `both`) and any vendor module. For charge-named packs, note that energy (Wh) is derived from charge × voltage.
 5. **Privacy:** the CLI export already omits serial numbers, usernames, home paths, IP addresses, tokens, and webhook URLs. Do not paste `config.json` or unsanitized `GET /api/v1/discover` JSON.
 6. Open a GitHub issue with the **Compatibility report** template and attach the JSON, or send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.

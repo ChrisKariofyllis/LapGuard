@@ -271,11 +271,34 @@ func TestRootJSONWhenFrontendUnavailable(t *testing.T) {
 
 func TestUnknownAPIIs404(t *testing.T) {
 	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/shutdown", nil)
+	for _, path := range []string{
+		"/api/v1/shutdown",
+		"/api/v1/thresholds",
+		"/api/v1/docker",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s status %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestHealthz(t *testing.T) {
+	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" || body["app"] != "lapguard" {
+		t.Fatalf("body %+v", body)
 	}
 }
 

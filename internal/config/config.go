@@ -357,7 +357,7 @@ func parseFlags(args []string, cfg Config) (Config, error) {
 	fs.StringVar(&cfg.Provider, "provider", cfg.Provider, "battery provider: auto, sysfs, or mock")
 	fs.StringVar(&cfg.SysfsRoot, "sysfs-root", cfg.SysfsRoot, "power_supply sysfs root (overridable for tests and fixtures)")
 	fs.StringVar(&cfg.BatteryName, "battery", cfg.BatteryName, "battery name under sysfs-root (empty = auto-detect BAT*)")
-	fs.StringVar(&cfg.WebDir, "web-dir", cfg.WebDir, "directory of built Svelte assets; empty disables static serving")
+	fs.StringVar(&cfg.WebDir, "web-dir", cfg.WebDir, "Svelte asset directory; \"none\" uses the embedded dashboard when the binary was built with -tags embedui")
 	fs.StringVar(&cfg.ConfigPath, "config", cfg.ConfigPath, "JSON config file (default: ~/.config/lapguard/config.json)")
 	fs.StringVar(&cfg.ThresholdMethod, "threshold-method", cfg.ThresholdMethod, "charge threshold method: auto, sysfs, tlp, or none")
 	fs.StringVar(&cfg.EventsDB, "events-db", cfg.EventsDB, "SQLite outage log (default: ~/.config/lapguard/events.db)")

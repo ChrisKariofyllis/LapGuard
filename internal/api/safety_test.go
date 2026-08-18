@@ -79,6 +79,30 @@ func TestGetConfigIncludesSafetyDefaults(t *testing.T) {
 	}
 }
 
+func TestPutConfigCannotDisableSafetyDryRun(t *testing.T) {
+	srv := newConfigServer(t, nil)
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(`{"safety":{"dry_run":false}}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
+	}
+	var body config.APIConfig
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Safety.DryRun {
+		t.Fatal("safety.dry_run must stay forced on")
+	}
+	loaded, err := config.LoadFile(srv.currentConfig().ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.Safety.DryRun {
+		t.Fatal("persisted safety.dry_run must stay true")
+	}
+}
+
 func TestCapabilitiesBatterySafetyEnabled(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/capabilities", nil)

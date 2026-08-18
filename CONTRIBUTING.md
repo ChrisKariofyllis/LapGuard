@@ -131,7 +131,7 @@ discovery on that machine. Do not paste `config.json` or unsanitized
 `GET /api/v1/discover` output.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the field list to record
-(battery name, naming convention, power path, threshold method, modules, TLP).
+(battery name, naming convention, power path, `power_direction`, threshold method, modules, TLP).
 
 ## Privacy rules
 
@@ -154,6 +154,6 @@ Fixture serials in this repo are synthetic and may stay.
 
 - Keep tests passing (`make test` and `make lint`).
 - Do not add `curl | sudo bash` installers or unrestricted sudoers rules.
-- Do not execute Docker commands or host shutdown/reboot.
+- Do not execute Docker commands, host shutdown/reboot, or charge-threshold writes.
 - Do not log secrets. Use `internal/config` redaction helpers.
 - Match existing Go and Svelte style. Prefer small, reviewable diffs.

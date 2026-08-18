@@ -129,7 +129,10 @@
     <div>
       <h2 class="text-sm font-medium">Configuration</h2>
       <p class="mt-1 text-xs text-mist">
-        Stored at <span class="font-mono">~/.config/lapguard/config.json</span> with mode 0600. Secrets are never written to logs.
+        Stored in the process config file (mode 0600). Default for a user
+        install is <span class="font-mono">~/.config/lapguard/config.json</span>;
+        the system unit uses <span class="font-mono">/etc/lapguard/config.json</span>.
+        Secrets are never written to logs.
       </p>
     </div>
     <button
@@ -249,7 +252,7 @@
       <div class="mt-3 grid gap-3 sm:grid-cols-3">
         <label class="flex items-center gap-2 text-sm text-snow sm:col-span-3">
           <input type="checkbox" bind:checked={shutdown.enabled} />
-          Enable automatic shutdown
+          Enable shutdown thresholds (not executed in this alpha)
         </label>
         <label class="block text-xs text-mist">
           Warning %
@@ -297,7 +300,7 @@
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
         <label class="flex items-center gap-2 text-sm text-snow">
           <input type="checkbox" bind:checked={docker.stop_enabled} />
-          Stop containers before shutdown
+          Stop containers before shutdown (stored only; not executed)
         </label>
         <label class="block text-xs text-mist">
           Timeout (seconds)

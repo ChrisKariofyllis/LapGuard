@@ -14,7 +14,7 @@ Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
 
 - APIs, config keys, and systemd paths may still change.
 - There is **no authentication** on the HTTP API.
-- Charge-threshold **writes are not exposed** over HTTP yet.
+- Charge-threshold **writes are not wired** (helpers exist, daemon never calls them).
 - CI and tests do **not** require a battery, Docker, root, or TLP.
 
 ### Safety controller is dry-run only
@@ -58,10 +58,11 @@ GitHub Release; a maintainer must publish the draft by hand.
 1. Download `lapguard_<version>_linux-amd64` (or `linux-arm64`) and `SHA256SUMS`
    from a published [GitHub Release](https://github.com/ChrisKariofyllis/LapGuard/releases).
 2. Verify checksums: `sha256sum -c SHA256SUMS --ignore-missing`
-3. `chmod +x lapguard_*_linux-amd64` and run it (no root required):
+3. `chmod +x lapguard_*_linux-amd64` (or `linux-arm64`) and run it (no root required):
 
    ```bash
    ./lapguard_<version>_linux-amd64
+   # or: ./lapguard_<version>_linux-arm64
    ```
 
 4. Open `http://127.0.0.1:8585`.
@@ -72,7 +73,14 @@ There is **no** `curl | sudo bash` installer. For a systemd unit and
 
 First start writes `~/.config/lapguard/config.json` (mode `0600`) and uses
 `~/.config/lapguard/events.db` for the outage log unless you pass `-config` /
-`-events-db`.
+`-events-db`. Release binaries embed the dashboard; systemd units pass
+`-web-dir none` so they use that embed instead of a local `web/dist`.
+
+Privacy-safe hardware report (no daemon required):
+
+```bash
+lapguard discover --report > lapguard-compatibility-report.json
+```
 
 ## Development
 
@@ -252,15 +260,16 @@ in this alpha.
 
 **Discovery.** Features are enabled only when the matching sysfs files,
 modules, or tools exist. Missing hardware is `none` plus `why_not`. See
-[COMPATIBILITY.md](COMPATIBILITY.md). Threshold writes exist in
-`internal/thresholds` but are not on the HTTP API.
+[COMPATIBILITY.md](COMPATIBILITY.md). Charge-threshold **writes are not
+wired**: `internal/thresholds` can talk to sysfs or `tlp setcharge`, but the
+daemon never calls those helpers and the HTTP API has no write endpoint.
 
 ## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/v1/telemetry` | Battery snapshot, `power_w` / `battery_power_w`, health (%) |
-| GET | `/api/v1/discover` | Re-run detection; full `CapabilityReport` |
+| GET | `/api/v1/telemetry` | Battery snapshot: `power_w`, `battery_power_w`, `power_direction`, `power_label`, health, runtime |
+| GET | `/api/v1/discover` | Re-run detection; full `CapabilityReport` (includes serials/hostname — do not share) |
 | GET | `/api/v1/capabilities` | UI payload: `detection_method`, `recommendation`, `why_not` |
 | GET | `/api/v1/config` | Notifications, shutdown, Docker, safety settings |
 | PUT | `/api/v1/config` | Merge and persist those settings |
@@ -271,6 +280,7 @@ modules, or tools exist. Missing hardware is `none` plus `why_not`. See
 | POST | `/api/v1/actions/test-notification` | Test message (enabled provider required) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
 | POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run) |
+| GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version` |
 
 `GET /api/v1/config` omits secret values and sets `webhook_configured` /
 `chat_id_configured`. `execution.shutdown` and `execution.docker` stay
@@ -284,7 +294,7 @@ internal/discovery/          # sysfs / modules / tools / threshold detection + s
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage event log
-internal/thresholds/         # sysfs writes or tlp setcharge (no HTTP yet)
+internal/thresholds/         # unused write helpers (sysfs / tlp setcharge); not called
 internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
 internal/safety/             # battery safety state machine (recording executor only)
 internal/webui/              # optional embed of web/dist (-tags embedui)

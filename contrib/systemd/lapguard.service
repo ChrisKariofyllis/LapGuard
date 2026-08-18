@@ -6,6 +6,10 @@
 # Create a dedicated account first (see docs/install.md). Do not add this
 # user to sudoers and do not grant CAP_SYS_BOOT. The alpha safety controller
 # is dry-run only: this unit must not execute Docker or host shutdown.
+# Charge-threshold writes are not performed.
+#
+# -web-dir none: serve the embedded dashboard from a release binary.
+# /etc/lapguard must be owned by User= so config.json (0600) is writable.
 
 [Unit]
 Description=LapGuard laptop power manager (alpha, dry-run safety)

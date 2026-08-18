@@ -110,7 +110,7 @@ body:
     attributes:
       label: Privacy checklist
       options:
-        - label: I removed serial numbers, usernames, IP addresses, tokens, and webhook URLs.
+        - label: I removed serial numbers, usernames, home-directory paths, IP and MAC addresses, UUIDs, tokens, and webhook URLs (or I attached `lapguard discover --report` output unchanged).
           required: true
         - label: I understand the safety controller is dry-run only and this report is about detection, not shutdown.
           required: true

@@ -378,6 +378,18 @@ func TestAtomicWriteFileMode(t *testing.T) {
 	}
 }
 
+func TestSafetyDryRunCannotBeTurnedOff(t *testing.T) {
+	s := DefaultSafety()
+	off := false
+	out, err := s.Apply(SafetyPatch{DryRun: &off})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.DryRun {
+		t.Fatal("normalize must force safety.dry_run on")
+	}
+}
+
 func TestConfigFileModeConstant(t *testing.T) {
 	if ConfigFileMode != 0o600 {
 		t.Fatalf("ConfigFileMode %o", ConfigFileMode)

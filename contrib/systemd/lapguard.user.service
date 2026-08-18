@@ -3,8 +3,9 @@
 # Runs as your login user. Config and the outage log stay under
 # ~/.config/lapguard/. The process does not need root, Docker, or TLP.
 #
+# -web-dir none: use the dashboard embedded in release binaries (-tags embedui).
 # This unit does not grant extra privileges. LapGuard will not stop
-# containers or shut down the host in this alpha.
+# containers, write charge thresholds, or shut down the host in this alpha.
 
 [Unit]
 Description=LapGuard laptop power manager (alpha, dry-run safety)
