@@ -4,6 +4,7 @@
   import PowerPanel from './lib/PowerPanel.svelte';
   import SafetyPanel from './lib/SafetyPanel.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
+  import { getAPIToken, setAPIToken } from './lib/auth';
   import {
     abs,
     fmtEstimatedRuntime,
@@ -26,6 +27,7 @@
   let error = $state<string | null>(null);
   let updatedAt = $state<Date | null>(null);
   let scanning = $state(false);
+  let apiToken = $state(getAPIToken());
 
   const battery = $derived(telemetry?.battery);
   const present = $derived(battery?.present ?? false);
@@ -158,6 +160,25 @@
       <div class="rounded-2xl border border-rose/40 bg-rose/10 px-4 py-3 text-sm text-rose">
         {error}. Start the Go API on 127.0.0.1:8585 if it is not running.
       </div>
+    {/if}
+
+    {#if capabilities?.auth_enabled}
+      <section class="rounded-2xl border border-line bg-card px-4 py-3 text-sm">
+        <p class="font-medium text-snow">API token required for settings changes</p>
+        <p class="mt-1 text-mist">
+          Paste the token from <span class="font-mono">lapguard auth generate</span>. It is kept in session storage only (not a cookie). GET telemetry stays readable without it.
+        </p>
+        <input
+          class="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
+          type="password"
+          autocomplete="off"
+          placeholder="Bearer token"
+          bind:value={apiToken}
+          oninput={() => setAPIToken(apiToken)}
+        />
+      </section>
+    {:else if capabilities?.auth_warning}
+      <p class="text-xs text-mist">{capabilities.auth_warning}</p>
     {/if}
 
     <section

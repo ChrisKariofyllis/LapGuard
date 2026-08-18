@@ -37,7 +37,7 @@ func TestGetSafetyDryRun(t *testing.T) {
 
 func TestSafetyTestSimulatesWithoutExecuting(t *testing.T) {
 	srv := newConfigServer(t, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/safety/test", strings.NewReader(`{"scenario":"warning"}`))
+	req := jsonRequest(http.MethodPost, "/api/v1/safety/test", `{"scenario":"warning"}`)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -47,7 +47,7 @@ func TestSafetyTestSimulatesWithoutExecuting(t *testing.T) {
 		t.Fatalf("response mentioned a host command: %s", rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/safety/test", strings.NewReader(`{"scenario":"critical"}`))
+	req = jsonRequest(http.MethodPost, "/api/v1/safety/test", `{"scenario":"critical"}`)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -57,7 +57,7 @@ func TestSafetyTestSimulatesWithoutExecuting(t *testing.T) {
 		t.Fatal("simulate must not claim commands executed")
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/safety/test", strings.NewReader(`{"scenario":"explode"}`))
+	req = jsonRequest(http.MethodPost, "/api/v1/safety/test", `{"scenario":"explode"}`)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -81,7 +81,7 @@ func TestGetConfigIncludesSafetyDefaults(t *testing.T) {
 
 func TestPutConfigCannotDisableSafetyDryRun(t *testing.T) {
 	srv := newConfigServer(t, nil)
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(`{"safety":{"dry_run":false}}`))
+	req := jsonRequest(http.MethodPut, "/api/v1/config", `{"safety":{"dry_run":false}}`)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

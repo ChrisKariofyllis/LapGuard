@@ -20,7 +20,7 @@ import (
 
 func TestTestNotificationRequiresEnabled(t *testing.T) {
 	srv := newConfigServer(t, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/actions/test-notification", strings.NewReader("{}"))
+	req := jsonRequest(http.MethodPost, "/api/v1/actions/test-notification", "{}")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -54,7 +54,7 @@ func TestTestNotificationSuccessAndRedaction(t *testing.T) {
 		HTTPTimeout: time.Second,
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/actions/test-notification", nil)
+	req := jsonRequest(http.MethodPost, "/api/v1/actions/test-notification", "{}")
 	rec := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -90,7 +90,7 @@ func TestTestNotificationDryRunZeroHTTP(t *testing.T) {
 		DryRun:     true,
 		WebhookURL: upstream.URL,
 	}
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/actions/test-notification", nil)
+	req := jsonRequest(http.MethodPost, "/api/v1/actions/test-notification", "{}")
 	rec := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

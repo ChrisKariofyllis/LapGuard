@@ -78,12 +78,16 @@ type ExecutionStatus struct {
 
 // APIConfig is the HTTP view of user-managed settings.
 type APIConfig struct {
-	Notifications NotificationsView `json:"notifications"`
-	Shutdown      ShutdownConfig    `json:"shutdown"`
-	Docker        DockerConfig      `json:"docker"`
-	Safety        SafetyConfig      `json:"safety"`
-	Execution     ExecutionStatus   `json:"execution"`
-	Notes         []string          `json:"notes,omitempty"`
+	Notifications   NotificationsView `json:"notifications"`
+	Shutdown        ShutdownConfig    `json:"shutdown"`
+	Docker          DockerConfig      `json:"docker"`
+	Safety          SafetyConfig      `json:"safety"`
+	AuthEnabled     bool              `json:"auth_enabled"`
+	TokenConfigured bool              `json:"token_configured"`
+	TokenCreatedAt  string            `json:"token_created_at,omitempty"`
+	LastRotatedAt   string            `json:"last_rotated_at,omitempty"`
+	Execution       ExecutionStatus   `json:"execution"`
+	Notes           []string          `json:"notes,omitempty"`
 }
 
 func DefaultNotifications() NotificationsConfig {
@@ -119,11 +123,16 @@ func StoredOnlyExecution() ExecutionStatus {
 }
 
 func (c Config) APIView() APIConfig {
+	view := c.Auth.View()
 	return APIConfig{
-		Notifications: c.Notifications.Public(),
-		Shutdown:      c.Shutdown,
-		Docker:        c.Docker,
-		Safety:        c.Safety,
+		Notifications:   c.Notifications.Public(),
+		Shutdown:        c.Shutdown,
+		Docker:          c.Docker,
+		Safety:          c.Safety,
+		AuthEnabled:     view.AuthEnabled,
+		TokenConfigured: view.TokenConfigured,
+		TokenCreatedAt:  view.TokenCreatedAt,
+		LastRotatedAt:   view.LastRotatedAt,
 		Execution: ExecutionStatus{
 			Notifications: c.Notifications.ExecutionState(),
 			Shutdown:      ExecutionStoredOnly,
@@ -131,6 +140,7 @@ func (c Config) APIView() APIConfig {
 		},
 		Notes: []string{
 			"Notification delivery runs only when a provider is configured and enabled. The battery safety controller is dry-run only: Docker stop and host shutdown are never executed.",
+			"GET telemetry, capabilities, discover, power, events, safety, healthz, and auth/status stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
 		},
 	}
 }

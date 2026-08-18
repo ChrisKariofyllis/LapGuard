@@ -55,7 +55,7 @@ func TestPutConfig(t *testing.T) {
 		"shutdown": {"enabled":true,"warning_threshold":25,"critical_threshold":8},
 		"docker": {"stop_enabled":true,"timeout_seconds":45}
 	}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(payload))
+	req := jsonRequest(http.MethodPut, "/api/v1/config", payload)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -103,7 +103,7 @@ func TestPutConfigMalformedJSON(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	cases := []string{"", "{", "[]", "null", "not-json", `{"shutdown":`, `{"shutdown":{"enabled":true}}{}`}
 	for _, body := range cases {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(body))
+		req := jsonRequest(http.MethodPut, "/api/v1/config", body)
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -124,7 +124,7 @@ func TestPutConfigInvalidThresholds(t *testing.T) {
 		`{"shutdown":{"warning_threshold":10,"critical_threshold":20}}`,
 	}
 	for _, body := range cases {
-		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(body))
+		req := jsonRequest(http.MethodPut, "/api/v1/config", body)
 		rec := httptest.NewRecorder()
 		srv.Handler().ServeHTTP(rec, req)
 		if rec.Code != http.StatusBadRequest {
@@ -138,18 +138,16 @@ func TestPutConfigInvalidThresholds(t *testing.T) {
 
 func TestPostNotificationsAndShutdown(t *testing.T) {
 	srv := newConfigServer(t, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/config/notifications", strings.NewReader(
-		`{"provider":"discord","enabled":true,"webhook_url":"https://discord.com/api/webhooks/1/abc"}`,
-	))
+	req := jsonRequest(http.MethodPost, "/api/v1/config/notifications",
+		`{"provider":"discord","enabled":true,"webhook_url":"https://discord.com/api/webhooks/1/abc"}`)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("notifications status %d body %s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/config/shutdown", strings.NewReader(
-		`{"enabled":true,"warning_threshold":30,"critical_threshold":12}`,
-	))
+	req = jsonRequest(http.MethodPost, "/api/v1/config/shutdown",
+		`{"enabled":true,"warning_threshold":30,"critical_threshold":12}`)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -176,9 +174,8 @@ func TestPostNotificationsAndShutdown(t *testing.T) {
 func TestConfigAtomicPersistenceAndMode(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	path := srv.currentConfig().ConfigPath
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(
-		`{"shutdown":{"enabled":false,"warning_threshold":18,"critical_threshold":7}}`,
-	))
+	req := jsonRequest(http.MethodPut, "/api/v1/config",
+		`{"shutdown":{"enabled":false,"warning_threshold":18,"critical_threshold":7}}`)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -211,9 +208,8 @@ func TestConfigAtomicPersistenceAndMode(t *testing.T) {
 		t.Fatalf("invalid persisted JSON %s", raw)
 	}
 
-	req = httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(
-		`{"shutdown":{"warning_threshold":22,"critical_threshold":9}}`,
-	))
+	req = jsonRequest(http.MethodPut, "/api/v1/config",
+		`{"shutdown":{"warning_threshold":22,"critical_threshold":9}}`)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -234,7 +230,7 @@ func TestConfigSecretsNotLogged(t *testing.T) {
 	srv := newConfigServer(t, log)
 	secret := "https://hooks.example.invalid/whsec_TEST_SECRET_TOKEN_9f3a"
 	putBody := `{"notifications":{"provider":"webhook","enabled":true,"webhook_url":"` + secret + `"}}`
-	req := httptest.NewRequest(http.MethodPut, "/api/v1/config", strings.NewReader(putBody))
+	req := jsonRequest(http.MethodPut, "/api/v1/config", putBody)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -242,7 +238,7 @@ func TestConfigSecretsNotLogged(t *testing.T) {
 	}
 
 	postBody := `{"provider":"webhook","enabled":true,"webhook_url":"` + secret + `","chat_id":"999"}`
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/config/notifications", strings.NewReader(postBody))
+	req = jsonRequest(http.MethodPost, "/api/v1/config/notifications", postBody)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

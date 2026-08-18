@@ -51,6 +51,7 @@ type Config struct {
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
 	Safety          SafetyConfig        `json:"safety"`
+	Auth            AuthConfig          `json:"auth"`
 	EventsDB        string              `json:"events_db,omitempty"`
 	PowerPoll       time.Duration       `json:"-"`
 	PowerDebounce   time.Duration       `json:"-"`
@@ -71,6 +72,7 @@ func defaults() Config {
 		Shutdown:        DefaultShutdown(),
 		Docker:          DefaultDocker(),
 		Safety:          DefaultSafety(),
+		Auth:            DefaultAuth(),
 		PowerPoll:       DefaultPowerPoll,
 		PowerDebounce:   DefaultPowerDebounce,
 		setFlags:        map[string]bool{},
@@ -249,6 +251,7 @@ func (c Config) Save(path string) error {
 		Shutdown:        c.Shutdown,
 		Docker:          c.Docker,
 		Safety:          c.Safety,
+		Auth:            c.Auth,
 		EventsDB:        c.EventsDB,
 	}, "", "  ")
 	if err != nil {
@@ -270,6 +273,7 @@ type persistDTO struct {
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
 	Safety          SafetyConfig        `json:"safety"`
+	Auth            AuthConfig          `json:"auth"`
 	EventsDB        string              `json:"events_db,omitempty"`
 }
 
@@ -307,6 +311,9 @@ func (c *Config) normalize() error {
 		return err
 	}
 	if err := c.Safety.normalize(); err != nil {
+		return err
+	}
+	if err := c.Auth.normalize(); err != nil {
 		return err
 	}
 	if c.PowerPoll <= 0 {

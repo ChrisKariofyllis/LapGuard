@@ -258,6 +258,42 @@ Or run the built-in probe (read-only; never executes sudo):
 lapguard tailscale check --pretty
 ```
 
+## Optional API token
+
+Authentication is **off** by default so local development on `127.0.0.1:8585`
+keeps working. Enable a Bearer token before Tailscale Serve:
+
+1. Start LapGuard locally on `127.0.0.1:8585`.
+2. Generate a token on the laptop:
+
+   ```bash
+   lapguard auth generate
+   ```
+
+3. Store the printed token in a password manager. It is shown **once**.
+   Only a SHA-256 hash is saved in `config.json` (mode `0600`).
+4. Authentication is enabled by that command. Confirm with
+   `lapguard auth status`.
+5. Configure Tailscale Serve as above. Do **not** use Funnel or expose
+   port 8585 publicly.
+6. Send `Authorization: Bearer <token>` on POST/PUT (settings, notification
+   test, safety simulation). GET telemetry stays readable without a token
+   in this alpha.
+
+Rotate or recover without the old token (local config file access):
+
+```bash
+lapguard auth rotate    # prints a new token; invalidates the previous hash
+lapguard auth disable   # turns auth off
+```
+
+HTTP `POST /api/v1/auth/rotate` never returns a plaintext token. Disable over
+HTTP requires a valid Bearer token when auth is on, or a loopback request to
+`127.0.0.1` when auth is off. Remote callers cannot enable or disable auth
+without a token.
+
+Real shutdown and Docker execution are not implemented.
+
 ## What this alpha will not do
 
 - Execute `docker stop` / `docker kill`

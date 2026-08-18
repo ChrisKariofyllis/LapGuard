@@ -112,15 +112,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/capabilities", s.handleCapabilities)
 	mux.HandleFunc("GET /api/v1/discover", s.handleDiscover)
 	mux.HandleFunc("GET /api/v1/config", s.handleGetConfig)
-	mux.HandleFunc("PUT /api/v1/config", s.handlePutConfig)
-	mux.HandleFunc("POST /api/v1/config/notifications", s.handlePostNotifications)
-	mux.HandleFunc("POST /api/v1/config/shutdown", s.handlePostShutdown)
-	mux.HandleFunc("POST /api/v1/actions/test-notification", s.handleTestNotification)
+	mux.HandleFunc("PUT /api/v1/config", s.secureWrite(s.handlePutConfig))
+	mux.HandleFunc("POST /api/v1/config/notifications", s.secureWrite(s.handlePostNotifications))
+	mux.HandleFunc("POST /api/v1/config/shutdown", s.secureWrite(s.handlePostShutdown))
+	mux.HandleFunc("POST /api/v1/actions/test-notification", s.secureWrite(s.handleTestNotification))
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)
-	mux.HandleFunc("POST /api/v1/safety/test", s.handleTestSafety)
+	mux.HandleFunc("POST /api/v1/safety/test", s.secureWrite(s.handleTestSafety))
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
+	mux.HandleFunc("GET /api/v1/auth/status", s.handleAuthStatus)
+	mux.HandleFunc("POST /api/v1/auth/rotate", s.secureAuthAdmin(s.handleAuthRotate))
+	mux.HandleFunc("POST /api/v1/auth/disable", s.secureAuthAdmin(s.handleAuthDisable))
 	mux.Handle("/", s.staticHandler())
 	return withMiddleware(mux, s.log)
 }
@@ -154,6 +157,9 @@ type capabilitiesResponse struct {
 	FeatureFlags     discovery.Features        `json:"feature_flags"`
 	Tools            discovery.Tools           `json:"tools"`
 	KernelModules    []string                  `json:"kernel_modules"`
+	AuthEnabled      bool                      `json:"auth_enabled"`
+	AuthWarning      string                    `json:"auth_warning,omitempty"`
+	ProtectGET       bool                      `json:"protect_get"`
 	Battery          discovery.BatteryIdentity `json:"battery"`
 }
 
@@ -212,6 +218,9 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		Tools:            report.AvailableTools,
 		KernelModules:    report.KernelModules,
 		Battery:          report.Battery,
+		AuthEnabled:      cfg.Auth.Enabled,
+		AuthWarning:      cfg.Auth.Warning(),
+		ProtectGET:       false,
 	}
 	if resp.KernelModules == nil {
 		resp.KernelModules = []string{}
@@ -257,11 +266,18 @@ func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Confi
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
-	s.writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"app":     config.AppName,
-		"version": config.Version,
-	})
+	cfg := s.currentConfig()
+	body := map[string]any{
+		"status":       "ok",
+		"app":          config.AppName,
+		"version":      config.Version,
+		"auth_enabled": cfg.Auth.Enabled,
+		"protect_get":  false,
+	}
+	if warn := cfg.Auth.Warning(); warn != "" {
+		body["auth_warning"] = warn
+	}
+	s.writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) staticHandler() http.Handler {
@@ -341,6 +357,7 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 			"events":               "/api/v1/events",
 			"safety":               "/api/v1/safety",
 			"safety_test":          "/api/v1/safety/test",
+			"auth_status":          "/api/v1/auth/status",
 		},
 	})
 }
@@ -390,7 +407,7 @@ func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 		}
 		setCORS(w, r)
 		next.ServeHTTP(w, r)
-		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" || r.URL.Path == "/api/v1/safety" {
+		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" || r.URL.Path == "/api/v1/safety" || r.URL.Path == "/api/v1/auth/status" {
 			return
 		}
 		log.Info("http",
@@ -404,13 +421,13 @@ func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 
 func setCORS(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
-	switch origin {
-	case "http://127.0.0.1:5173", "http://localhost:5173":
-		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Vary", "Origin")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type")
+	if origin == "" || !originExplicitlyAllowed(origin, r.Host) {
+		return
 	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Vary", "Origin")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Authorization")
 }
 
 func firstNonEmpty(values ...string) string {

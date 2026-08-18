@@ -293,12 +293,18 @@ func TestHealthz(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d body %s", rec.Code, rec.Body.String())
 	}
-	var body map[string]string
+	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
 	if body["status"] != "ok" || body["app"] != "lapguard" {
 		t.Fatalf("body %+v", body)
+	}
+	if body["auth_enabled"] != false {
+		t.Fatalf("auth should be disabled by default: %+v", body)
+	}
+	if _, ok := body["auth_warning"].(string); !ok {
+		t.Fatal("expected auth_warning when authentication is disabled")
 	}
 }
 

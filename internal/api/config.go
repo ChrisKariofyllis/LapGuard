@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"lapguard/internal/config"
+	"lapguard/internal/storage"
 )
 
 const maxConfigBody = 64 << 10
@@ -75,7 +76,9 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		"critical_threshold", view.Shutdown.CriticalThreshold,
 		"docker_stop_enabled", view.Docker.StopEnabled,
 		"docker_timeout_seconds", view.Docker.TimeoutSeconds,
+		"auth_enabled", view.Auth.Enabled,
 	)
+	s.audit(r, storage.AuditConfigUpdate, true, "config updated")
 	s.writeJSON(w, http.StatusOK, view.APIView())
 }
 
@@ -98,6 +101,7 @@ func (s *Server) handlePostNotifications(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.log.Info("notifications config stored", config.SafeNotifications(view.Notifications))
+	s.audit(r, storage.AuditConfigUpdate, true, "notifications updated")
 	s.writeJSON(w, http.StatusOK, view.APIView())
 }
 
@@ -124,6 +128,7 @@ func (s *Server) handlePostShutdown(w http.ResponseWriter, r *http.Request) {
 		"warning_threshold", view.Shutdown.WarningThreshold,
 		"critical_threshold", view.Shutdown.CriticalThreshold,
 	)
+	s.audit(r, storage.AuditConfigUpdate, true, "shutdown settings stored")
 	s.writeJSON(w, http.StatusOK, view.APIView())
 }
 
@@ -174,6 +179,10 @@ func decodeObject(r *http.Request, dest any) error {
 		return fmt.Errorf("%w: request body too large", config.ErrMalformedJSON)
 	}
 	trim := bytes.TrimSpace(data)
+	return decodeObjectBytes(trim, dest)
+}
+
+func decodeObjectBytes(trim []byte, dest any) error {
 	if len(trim) == 0 || trim[0] != '{' {
 		return config.ErrMalformedJSON
 	}

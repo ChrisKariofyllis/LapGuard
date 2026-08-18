@@ -13,7 +13,8 @@ Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
 **This is an open-source alpha.** Treat it as experimental software.
 
 - APIs, config keys, and systemd paths may still change.
-- There is **no authentication** on the HTTP API.
+- There is **no authentication** on the HTTP API unless you enable an optional Bearer token (`lapguard auth generate`).
+- GET telemetry stays readable without a token in this alpha; POST/PUT require the token when auth is enabled.
 - Charge-threshold **writes are not wired** (helpers exist, daemon never calls them).
 - CI and tests do **not** require a battery, Docker, root, or TLP.
 
@@ -44,7 +45,8 @@ execution are out of scope for this alpha.
 - Optional notifications (ntfy, Telegram, Discord) — **off by default**
 - Battery safety state machine with simulate-warning / simulate-critical
 - Svelte dashboard for telemetry, capabilities, power events, config, and safety
-- Loopback bind; remote access is meant to go through Tailscale or SSH, not a public listen address
+- Optional Bearer API token (`lapguard auth generate`) protecting POST/PUT routes
+- Loopback bind; remote access is meant to go through Tailscale Serve or SSH, not a public listen address
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for tested machines. The production
 reference laptop is a **Fujitsu Lifebook A3510** (BAT1, `charge_*`, derived
@@ -81,6 +83,13 @@ Privacy-safe hardware report (no daemon required):
 
 ```bash
 lapguard discover --report > lapguard-compatibility-report.json
+```
+
+Optional API token (shown once; hash only in `config.json`):
+
+```bash
+lapguard auth generate
+lapguard auth status
 ```
 
 ## Development
@@ -205,21 +214,39 @@ lapguard tailscale check --pretty
 
 ### Security
 
-LapGuard has **no application-level authentication**. Anyone who can reach the
-HTTP port can read telemetry and change settings. With Serve, **Tailscale
-identity and ACLs are the security boundary**. Only trusted tailnet
-users/devices should be allowed. Do not combine this setup with Funnel or any
-other public exposure of port 8585.
+When `auth.enabled` is **false** (the default), LapGuard has **no application-level
+authentication**. Anyone who can reach the HTTP port can change settings.
+Enable a Bearer token before exposing the dashboard over Tailscale:
+
+```bash
+lapguard auth generate
+```
+
+Store the printed token in a password manager. It is shown once. Only a
+SHA-256 hash is written to `config.json` (mode `0600`). Send it as
+`Authorization: Bearer <token>` on POST/PUT. Do not put tokens in URLs.
+
+GET telemetry, capabilities, discover, power, events, safety, healthz,
+config, and auth/status stay readable without a token in this alpha.
+Protecting GET is reserved for a later release.
+
+With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are
+the security boundary. Only trusted tailnet users/devices should be allowed.
+Do not use Funnel or expose port 8585 publicly.
+
+If you lose the token, on the laptop run `lapguard auth rotate` or
+`lapguard auth disable` (these edit the local config file; they do not need
+the old token). Then generate a new one.
 
 ## Security limitations
 
-- **No application authentication or authorization.** Anyone who can reach
-  the port can read telemetry, change notification settings, and trigger
-  dry-run safety tests. Remote access should use Tailscale Serve plus ACLs
-  (or SSH), not a public bind. See [Remote access](#remote-access-tailscale-serve).
-- Secrets in `config.json` (webhook URLs, bot tokens, chat IDs) are stored
-  mode `0600` and are **redacted** from API responses and logs. They are
-  still present on disk. Never commit that file.
+- **Optional Bearer authentication.** Default is off for local development.
+  When enabled, POST/PUT require `Authorization: Bearer`. GET telemetry remains
+  readable. See [Remote access](#remote-access-tailscale-serve).
+- Secrets in `config.json` (token hashes, webhook URLs, bot tokens, chat IDs)
+  are stored mode `0600` and are **redacted** from API responses and logs.
+  The plaintext API token is never stored or returned by HTTP. Never commit
+  `config.json`.
 - Notifications, when enabled, send battery/AC events to a third party.
   Treat the webhook URL as a secret.
 - Discovery reports hostname, kernel, and battery model on the HTTP API.
@@ -228,7 +255,7 @@ other public exposure of port 8585.
 - The process should not run as root for alpha. The systemd templates do
   not grant sudo or `CAP_SYS_BOOT`.
 - Dry-run safety means a low battery will **not** stop workloads or power
-  off the machine. Do not rely on LapGuard to protect the pack yet.
+  off the machine. Real shutdown and Docker execution are not implemented.
 
 ## Compatibility reports
 
@@ -355,27 +382,33 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | POST | `/api/v1/actions/test-notification` | Test message (enabled provider required) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
 | POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run) |
-| GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version` |
+| GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version`, `auth_enabled` |
+| GET | `/api/v1/auth/status` | `auth_enabled`, `token_configured`, timestamps (never the token or hash) |
+| POST | `/api/v1/auth/rotate` | Instructs you to use `lapguard auth rotate` (HTTP never returns a new token) |
+| POST | `/api/v1/auth/disable` | Disable auth (Bearer required if enabled; loopback-only if disabled) |
 
 `GET /api/v1/config` omits secret values and sets `webhook_configured` /
-`chat_id_configured`. `execution.shutdown` and `execution.docker` stay
-`stored_only` in this alpha.
+`chat_id_configured`, `auth_enabled`, and `token_configured`. It never returns
+`token_hash` or the plaintext token. `execution.shutdown` and `execution.docker`
+stay `stored_only` in this alpha. When `auth.enabled` is true, POST/PUT need
+`Authorization: Bearer`. GET routes listed above stay readable.
 
 ## Layout
 
 ```
-cmd/lapguard/                # daemon + `discover --report` + `tailscale` CLI
+cmd/lapguard/                # daemon + discover / tailscale / auth CLI
+internal/auth/               # bearer token generate + SHA-256 verify
 internal/discovery/          # sysfs / modules / tools / threshold detection + sanitized export
 internal/tailscale/          # read-only Tailscale Serve diagnostics
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/power/              # mains scan, debounce watcher
-internal/storage/            # SQLite outage event log
+internal/storage/            # SQLite outage + bounded audit log
 internal/thresholds/         # unused write helpers (sysfs / tlp setcharge); not called
 internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
 internal/safety/             # battery safety state machine (recording executor only)
 internal/webui/              # optional embed of web/dist (-tags embedui)
 internal/api/
-internal/config/             # flags + atomic config.json
+internal/config/             # flags + atomic config.json (mode 0600)
 contrib/systemd/             # user and system unit templates
 testdata/sysfs/BAT0/
 web/

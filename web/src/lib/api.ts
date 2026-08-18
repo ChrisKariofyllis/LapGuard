@@ -1,4 +1,5 @@
 import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
+import { authHeaders } from './auth';
 
 async function readError(path: string, res: Response): Promise<string> {
   try {
@@ -32,6 +33,7 @@ async function sendJSON<T>(method: string, path: string, body: unknown): Promise
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify(body),
   });
@@ -97,6 +99,7 @@ export async function testNotification(): Promise<TestNotificationResult> {
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: '{}',
   });
@@ -146,6 +149,7 @@ export async function testSafety(scenario: 'warning' | 'critical'): Promise<Safe
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/json',
+      ...authHeaders(),
     },
     body: JSON.stringify({ scenario }),
   });

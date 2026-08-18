@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"lapguard/internal/notify"
+	"lapguard/internal/storage"
 )
 
 type testNotificationResponse struct {
@@ -74,5 +75,6 @@ func (s *Server) handleTestNotification(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	resp.OK = true
+	s.audit(r, storage.AuditNotificationTest, true, "notification test")
 	s.writeJSON(w, http.StatusOK, resp)
 }

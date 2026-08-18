@@ -3,21 +3,28 @@ package config
 import (
 	"context"
 	"log/slog"
+	"regexp"
 	"strings"
+
+	"lapguard/internal/auth"
 )
 
 const redacted = "[redacted]"
 
-var secretKeyFragments = []string{
-	"webhook",
-	"token",
-	"password",
-	"secret",
-	"authorization",
-	"api_key",
-	"apikey",
-	"chat_id",
-}
+var (
+	secretKeyFragments = []string{
+		"webhook",
+		"token",
+		"password",
+		"secret",
+		"authorization",
+		"api_key",
+		"apikey",
+		"chat_id",
+	}
+	bearerRe  = regexp.MustCompile(`(?i)bearer\s+\S+`)
+	lgTokenRe = regexp.MustCompile(`\blg_[A-Za-z0-9_-]{16,}\b`)
+)
 
 // NewRedactingHandler wraps a slog handler so notification secrets, tokens,
 // passwords, and webhook URLs never reach the log sink.
@@ -96,6 +103,11 @@ func secretKey(key string) bool {
 
 func redactString(s string) string {
 	if strings.Contains(s, "://") {
+		return redacted
+	}
+	s = bearerRe.ReplaceAllString(s, "Bearer "+redacted)
+	s = lgTokenRe.ReplaceAllString(s, redacted)
+	if auth.LooksLikeToken(s) {
 		return redacted
 	}
 	return s

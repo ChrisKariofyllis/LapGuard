@@ -3,13 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 
+	"lapguard/internal/config"
 	"lapguard/internal/notify"
 	"lapguard/internal/safety"
+	"lapguard/internal/storage"
 )
 
 type safetyTestRequest struct {
@@ -58,9 +59,13 @@ func (s *Server) handleTestSafety(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusBadRequest, "malformed JSON", err)
 		return
 	}
+	if len(raw) > maxConfigBody {
+		s.writeError(w, http.StatusBadRequest, "malformed JSON", config.ErrMalformedJSON)
+		return
+	}
 	if trim := bytes.TrimSpace(raw); len(trim) > 0 {
 		var req safetyTestRequest
-		if err := json.Unmarshal(trim, &req); err != nil {
+		if err := decodeObjectBytes(trim, &req); err != nil {
 			s.writeError(w, http.StatusBadRequest, "malformed JSON", err)
 			return
 		}
@@ -85,6 +90,7 @@ func (s *Server) handleTestSafety(w http.ResponseWriter, r *http.Request) {
 		"message": safety.DryRunMessage,
 		"safety":  snap,
 	})
+	s.audit(r, storage.AuditSafetyTest, true, "safety simulation")
 }
 
 func (s *Server) safetyRead(ctx context.Context) (safety.Sample, error) {

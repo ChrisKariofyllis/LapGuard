@@ -108,6 +108,9 @@ export type Capabilities = {
   tools: Tools;
   kernel_modules: string[];
   battery: BatteryIdentity;
+  auth_enabled?: boolean;
+  auth_warning?: string;
+  protect_get?: boolean;
 };
 
 export type NotificationProvider = 'none' | 'ntfy' | 'telegram' | 'discord' | 'webhook';
@@ -138,6 +141,10 @@ export type AppConfig = {
   shutdown: ShutdownConfig;
   docker: DockerConfig;
   safety?: SafetyConfig;
+  auth_enabled?: boolean;
+  token_configured?: boolean;
+  token_created_at?: string;
+  last_rotated_at?: string;
   execution: {
     notifications: string;
     shutdown: string;
