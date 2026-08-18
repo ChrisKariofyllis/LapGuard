@@ -40,6 +40,7 @@ const (
 	AuditPowerOffResult   = "poweroff_result"
 	AuditDockerAttempt    = "docker_drain_attempt"
 	AuditDockerResult     = "docker_drain_result"
+	AuditAutoDrainRespond = "auto_drain_respond"
 )
 
 // AuditEvent is a redacted security log row. It never stores tokens, headers,

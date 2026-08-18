@@ -34,6 +34,7 @@ Defaults:
 - `safety.dry_run=true`
 - `safety.require_ac_loss=true`
 - `docker.stop_enabled=false`
+- `auto_drain.enabled=false`
 
 Manual `POST /api/v1/actions/poweroff` and `POST /api/v1/actions/docker-drain`
 are experimental. They stay behind authentication (when enabled), explicit
@@ -51,6 +52,17 @@ is outside this project. Real Docker drain and host poweroff are **not**
 safe for production yet.
 
 > **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
+
+### v0.9.5-alpha smart automatic drain
+
+Optional `auto_drain` can warn on ntfy (or another configured provider) when the
+pack is at or below a threshold (default 10%) while discharging, then wait for
+YES / NO in the dashboard. YES or timeout runs docker drain → sync → poweroff.
+NO continues on battery. It stays **off** unless you enable it, and it **never**
+starts without a successful notification. Host commands still need
+`docker.stop_enabled=true`, `safety.dry_run=false`, and `actions.real_enabled=true`.
+ntfy cannot POST back to `127.0.0.1`; do not put Bearer tokens in ntfy action URLs.
+There is no UPS integration and no root escalation.
 
 ### v0.9.3-alpha limitations
 
@@ -406,6 +418,12 @@ Automatic execution of that plan is not implemented. `POST /api/v1/safety/test`
 with `{"scenario":"warning"}` or `"critical"` simulates a transition without
 sysfs and without commands.
 
+**Smart automatic drain.** Off by default (`auto_drain.enabled=false`). When
+enabled, a successful notification is required before any wait or sequence.
+Reply YES/NO with `POST /api/v1/auto-drain/respond` or the dashboard. Timeout
+is treated as YES. The sequence is docker drain → sync → poweroff. Real host
+commands still require the existing action gates.
+
 **Config.** `GET`/`PUT /api/v1/config` persist notifications, shutdown
 percents, Docker *intent*, safety flags, and experimental action gates.
 Critical percent must be lower than warning. Defaults keep
@@ -439,6 +457,9 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | POST | `/api/v1/actions/docker-drain` | Manual Docker drain (experimental; confirm `STOP_DOCKER`) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
 | POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run) |
+| GET | `/api/v1/auto-drain/status` | Smart drain state machine (readable without a token) |
+| PUT | `/api/v1/auto-drain/config` | Persist auto-drain settings (auth when enabled) |
+| POST | `/api/v1/auto-drain/respond` | `{"action":"yes"}` or `{"action":"no"}` (auth when enabled) |
 | GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version`, `auth_enabled` |
 | GET | `/api/v1/auth/status` | `auth_enabled`, `token_configured`, timestamps (never the token or hash) |
 | POST | `/api/v1/auth/rotate` | Instructs you to use `lapguard auth rotate` (HTTP never returns a new token) |
@@ -455,10 +476,11 @@ explanation that on-disk `config.json` edits require a restart.
 by default. When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`.
 GET routes listed above stay readable.
 
-Manual poweroff and Docker drain are **not** production-ready. Automatic
-low-battery shutdown is **not implemented**. Optional `Idempotency-Key` on
-those POSTs is hashed in memory and rejected as a duplicate during the
-cooldown window.
+Manual poweroff and Docker drain are **not** production-ready. The safety
+controller still does **not** execute automatic low-battery shutdown. Optional
+smart drain is experimental and off by default; it never runs without a
+notification. Optional `Idempotency-Key` on those POSTs is hashed in memory
+and rejected as a duplicate during the cooldown window.
 
 ## Layout
 
@@ -472,7 +494,7 @@ internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage + bounded audit log
 internal/thresholds/         # unused write helpers (sysfs / tlp setcharge); not called
 internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
-internal/safety/             # battery safety state machine (recording executor)
+internal/safety/             # battery safety + smart auto-drain state machines
 internal/actions/            # gated real executor (disabled by default; refused in tests)
 internal/webui/              # optional embed of web/dist (-tags embedui)
 internal/api/

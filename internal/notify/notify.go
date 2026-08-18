@@ -20,6 +20,7 @@ const (
 	EventBatteryWarning  = "BATTERY_WARNING"
 	EventBatteryCritical = "BATTERY_CRITICAL"
 	EventTest            = "TEST"
+	EventAutoDrain       = "AUTO_DRAIN_WARNING"
 
 	DefaultHTTPTimeout = 5 * time.Second
 	DefaultMaxAttempts = 3
@@ -130,7 +131,7 @@ func (s *Service) Send(ctx context.Context, event NotificationEvent) error {
 	}
 	event = NormalizeEvent(event)
 
-	if event.Type != EventTest && !s.limiter.Allow(event.Type) {
+	if event.Type != EventTest && event.Type != EventAutoDrain && !s.limiter.Allow(event.Type) {
 		s.log.Info("notification rate-limited", "event", event.Type, "provider", cfg.Provider)
 		return ErrRateLimited
 	}
@@ -172,7 +173,7 @@ func skipNotifyErr(err error) bool {
 
 func AllowedEvent(kind string) bool {
 	switch kind {
-	case EventACConnected, EventACDisconnected, EventBatteryWarning, EventBatteryCritical, EventTest:
+	case EventACConnected, EventACDisconnected, EventBatteryWarning, EventBatteryCritical, EventTest, EventAutoDrain:
 		return true
 	default:
 		return false
@@ -232,6 +233,8 @@ func DefaultCopy(kind string) (title, message string) {
 		return "LapGuard: battery critical", "Battery charge has reached the critical threshold."
 	case EventTest:
 		return "LapGuard: test notification", "LapGuard test notification. Delivery is working."
+	case EventAutoDrain:
+		return "LapGuard: battery low", "Battery low! In 30min: [YES] Save+Stop / [NO] Let run. Confirm in the LapGuard dashboard."
 	default:
 		return "LapGuard", kind
 	}

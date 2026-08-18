@@ -151,6 +151,7 @@ export type AppConfig = {
   shutdown: ShutdownConfig;
   docker: DockerConfig;
   safety?: SafetyConfig;
+  auto_drain?: AutoDrainConfig;
   actions?: ActionsConfig;
   auth_enabled?: boolean;
   token_configured?: boolean;
@@ -162,6 +163,35 @@ export type AppConfig = {
     docker: string;
   };
   notes?: string[];
+};
+
+export type AutoDrainConfig = {
+  enabled: boolean;
+  battery_threshold_percent: number;
+  pre_notification_minutes: number;
+  response_timeout_minutes: number;
+  notification_services: string[];
+  on_user_no: string;
+};
+
+export type AutoDrainStatus = AutoDrainConfig & {
+  state: string;
+  battery_percent?: number | null;
+  discharging: boolean;
+  notified: boolean;
+  awaiting_response: boolean;
+  seconds_remaining: number;
+  dry_run: boolean;
+  docker_stop_enabled: boolean;
+  real_enabled: boolean;
+  commands_executed: boolean;
+  plan: string[];
+  gates: string[];
+  reason?: string;
+  last_response?: string;
+  notified_at?: string | null;
+  message?: string;
+  running?: boolean;
 };
 
 export type SafetyConfig = {

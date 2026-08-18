@@ -52,6 +52,7 @@ func TestPublicAlphaContract(t *testing.T) {
 		"/api/v1/discover",
 		"/api/v1/actions/status",
 		"/api/v1/actions/preflight",
+		"/api/v1/auto-drain/status",
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -76,6 +77,9 @@ func TestPublicAlphaContract(t *testing.T) {
 	}
 	if cfg.Docker.StopEnabled {
 		t.Fatal("docker.stop_enabled must default false")
+	}
+	if cfg.AutoDrain.Enabled {
+		t.Fatal("auto_drain.enabled must default false")
 	}
 
 	preview := httptest.NewRecorder()

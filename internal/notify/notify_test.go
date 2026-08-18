@@ -315,6 +315,37 @@ func TestDuplicateEventsAreRateLimited(t *testing.T) {
 	}
 }
 
+func TestAutoDrainEventSkipsRateLimit(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	n := New(Options{
+		Config: func() config.NotificationsConfig {
+			return config.NotificationsConfig{Provider: "ntfy", Enabled: true, WebhookURL: srv.URL}
+		},
+		Client:   srv.Client(),
+		Cooldown: time.Minute,
+		Backoff:  time.Millisecond,
+	})
+	ev := NotificationEvent{Type: EventAutoDrain, Title: "LapGuard: battery low", Message: "Battery low!"}
+	if err := n.Send(context.Background(), ev); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Send(context.Background(), ev); err != nil {
+		t.Fatalf("auto-drain should skip limiter: %v", err)
+	}
+	if hits.Load() != 2 {
+		t.Fatalf("hits %d, want 2", hits.Load())
+	}
+	if !AllowedEvent(EventAutoDrain) {
+		t.Fatal("AUTO_DRAIN_WARNING must be allowed")
+	}
+}
+
 func TestDisabledSkipsHTTP(t *testing.T) {
 	n := newTestService(t, config.DefaultNotifications(), http.DefaultClient)
 	if err := n.Send(context.Background(), TestEvent()); !errors.Is(err, ErrDisabled) {

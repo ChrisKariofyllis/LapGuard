@@ -21,6 +21,7 @@ type settingsRequest struct {
 	Docker        *config.DockerPatch        `json:"docker"`
 	Safety        *config.SafetyPatch        `json:"safety"`
 	Actions       *config.ActionsPatch       `json:"actions"`
+	AutoDrain     *config.AutoDrainPatch     `json:"auto_drain"`
 	Execution     json.RawMessage            `json:"execution"`
 	Notes         json.RawMessage            `json:"notes"`
 }
@@ -70,6 +71,13 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			cfg.Actions = next
+		}
+		if req.AutoDrain != nil {
+			next, err := cfg.AutoDrain.Apply(*req.AutoDrain)
+			if err != nil {
+				return err
+			}
+			cfg.AutoDrain = next
 		}
 		return nil
 	})

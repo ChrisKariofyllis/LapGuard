@@ -1,4 +1,4 @@
-import type { ActionPreflight, ActionResult, ActionStatus, AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
+import type { ActionPreflight, ActionResult, ActionStatus, AppConfig, AutoDrainConfig, AutoDrainStatus, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
 import { authHeaders } from './auth';
 
 async function readError(path: string, res: Response): Promise<string> {
@@ -141,6 +141,31 @@ export function fetchEvents(limit = 50, type?: string, signal?: AbortSignal): Pr
 
 export function fetchSafety(signal?: AbortSignal): Promise<SafetyStatus> {
   return getJSON<SafetyStatus>('/api/v1/safety', signal);
+}
+
+export function fetchAutoDrain(signal?: AbortSignal): Promise<AutoDrainStatus> {
+  return getJSON<AutoDrainStatus>('/api/v1/auto-drain/status', signal);
+}
+
+export function putAutoDrainConfig(body: AutoDrainConfig): Promise<AutoDrainStatus> {
+  return sendJSON<AutoDrainStatus>('PUT', '/api/v1/auto-drain/config', body);
+}
+
+export async function respondAutoDrain(action: 'yes' | 'no'): Promise<AutoDrainStatus> {
+  const res = await fetch('/api/v1/auto-drain/respond', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify({ action }),
+  });
+  const parsed = (await res.json().catch(() => ({}))) as AutoDrainStatus & { error?: string; detail?: string };
+  if (!res.ok) {
+    throw new Error(parsed.error || parsed.detail || `auto-drain respond failed: ${res.status}`);
+  }
+  return parsed;
 }
 
 export async function testSafety(scenario: 'warning' | 'critical'): Promise<SafetyTestResult> {

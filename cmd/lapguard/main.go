@@ -153,6 +153,9 @@ func run(args []string) error {
 	if ctrl := app.Safety(); ctrl != nil {
 		go ctrl.Run(ctx)
 	}
+	if ad := app.AutoDrain(); ad != nil {
+		go ad.Run(ctx)
+	}
 
 	if cfg.ShouldWrite() {
 		if err := cfg.Save(cfg.ConfigPath); err != nil {

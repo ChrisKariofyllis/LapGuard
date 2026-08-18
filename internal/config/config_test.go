@@ -396,6 +396,31 @@ func TestSafetyDryRunDefaultsOnAndCanBeTurnedOff(t *testing.T) {
 	}
 }
 
+func TestAutoDrainDefaultsOff(t *testing.T) {
+	a := DefaultAutoDrain()
+	if a.Enabled {
+		t.Fatal("auto_drain.enabled must default false")
+	}
+	if a.BatteryThresholdPercent != DefaultAutoDrainThreshold || a.PreNotificationMinutes != DefaultAutoDrainPreNotifyMinutes || a.ResponseTimeoutMinutes != DefaultAutoDrainResponseMinutes {
+		t.Fatalf("%+v", a)
+	}
+	if a.OnUserNo != AutoDrainOnUserNoContinue {
+		t.Fatalf("on_user_no %q", a.OnUserNo)
+	}
+	on := true
+	out, err := a.Apply(AutoDrainPatch{Enabled: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Enabled || out.BatteryThresholdPercent != 10 {
+		t.Fatalf("%+v", out)
+	}
+	bad := "shutdown_anyway"
+	if _, err := a.Apply(AutoDrainPatch{OnUserNo: &bad}); err == nil {
+		t.Fatal("invalid on_user_no should fail")
+	}
+}
+
 func TestConfigFileModeConstant(t *testing.T) {
 	if ConfigFileMode != 0o600 {
 		t.Fatalf("ConfigFileMode %o", ConfigFileMode)

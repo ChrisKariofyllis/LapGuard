@@ -22,12 +22,15 @@ const (
 	DefaultWebDir          = "web/dist"
 	DefaultThresholdMethod = "auto"
 
-	DefaultNotifyProvider    = "none"
-	DefaultWarningThreshold  = 20
-	DefaultCriticalThreshold = 10
-	DefaultDockerTimeoutSecs = 30
-	DefaultSafetyCooldown    = 60
-	ConfigFileMode           = os.FileMode(0o600)
+	DefaultNotifyProvider            = "none"
+	DefaultWarningThreshold          = 20
+	DefaultCriticalThreshold         = 10
+	DefaultDockerTimeoutSecs         = 30
+	DefaultSafetyCooldown            = 60
+	DefaultAutoDrainThreshold        = 10
+	DefaultAutoDrainPreNotifyMinutes = 30
+	DefaultAutoDrainResponseMinutes  = 10
+	ConfigFileMode                   = os.FileMode(0o600)
 
 	DefaultPowerPoll     = 5 * time.Second
 	DefaultPowerDebounce = 10 * time.Second
@@ -51,6 +54,7 @@ type Config struct {
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
 	Safety          SafetyConfig        `json:"safety"`
+	AutoDrain       AutoDrainConfig     `json:"auto_drain"`
 	Auth            AuthConfig          `json:"auth"`
 	Actions         ActionsConfig       `json:"actions"`
 	EventsDB        string              `json:"events_db,omitempty"`
@@ -74,6 +78,7 @@ func defaults() Config {
 		Shutdown:        DefaultShutdown(),
 		Docker:          DefaultDocker(),
 		Safety:          DefaultSafety(),
+		AutoDrain:       DefaultAutoDrain(),
 		Auth:            DefaultAuth(),
 		Actions:         DefaultActions(),
 		PowerPoll:       DefaultPowerPoll,
@@ -266,6 +271,7 @@ func (c Config) Save(path string) error {
 		Shutdown:        c.Shutdown,
 		Docker:          c.Docker,
 		Safety:          c.Safety,
+		AutoDrain:       c.AutoDrain,
 		Auth:            c.Auth,
 		Actions:         c.Actions,
 		EventsDB:        c.EventsDB,
@@ -289,6 +295,7 @@ type persistDTO struct {
 	Shutdown        ShutdownConfig      `json:"shutdown"`
 	Docker          DockerConfig        `json:"docker"`
 	Safety          SafetyConfig        `json:"safety"`
+	AutoDrain       AutoDrainConfig     `json:"auto_drain"`
 	Auth            AuthConfig          `json:"auth"`
 	Actions         ActionsConfig       `json:"actions"`
 	EventsDB        string              `json:"events_db,omitempty"`
@@ -328,6 +335,9 @@ func (c *Config) normalize() error {
 		return err
 	}
 	if err := c.Safety.normalize(); err != nil {
+		return err
+	}
+	if err := c.AutoDrain.normalize(); err != nil {
 		return err
 	}
 	if err := c.Auth.normalize(); err != nil {

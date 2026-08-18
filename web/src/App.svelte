@@ -3,6 +3,7 @@
   import ConfigPanel from './lib/ConfigPanel.svelte';
   import PowerPanel from './lib/PowerPanel.svelte';
   import SafetyPanel from './lib/SafetyPanel.svelte';
+  import AutoDrainPanel from './lib/AutoDrainPanel.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import { getAPIToken, setAPIToken } from './lib/auth';
   import {
@@ -315,6 +316,8 @@
     <PowerPanel />
 
     <SafetyPanel />
+
+    <AutoDrainPanel />
 
     <section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
       <div class="flex flex-wrap items-center justify-between gap-2">

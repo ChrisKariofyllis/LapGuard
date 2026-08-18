@@ -49,6 +49,9 @@ func TestGetConfig(t *testing.T) {
 	if !body.Actions.RequireConfirmation {
 		t.Fatal("confirmation must be required")
 	}
+	if body.AutoDrain.Enabled {
+		t.Fatal("auto_drain must default off")
+	}
 	if body.Execution.Notifications != config.ExecutionUnconfigured {
 		t.Fatalf("notifications execution %+v", body.Execution)
 	}

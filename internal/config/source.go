@@ -111,6 +111,7 @@ func (c Config) LogStartup(log *slog.Logger) {
 		"safety_dry_run", c.Safety.DryRun,
 		"require_ac_loss", c.Safety.RequireACLoss,
 		"docker_stop_enabled", c.Docker.StopEnabled,
+		"auto_drain_enabled", c.AutoDrain.Enabled,
 		"executor", c.actionExecutorKind(),
 		"gates", gates,
 	)

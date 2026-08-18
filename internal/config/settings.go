@@ -20,9 +20,12 @@ const (
 	ExecutionReady        = "ready"
 	RedactedSecret        = "[redacted]"
 
-	maxWebhookURLLen = 2048
-	maxChatIDLen     = 128
-	maxDockerTimeout = 3600
+	AutoDrainOnUserNoContinue = "continue_on_battery"
+
+	maxWebhookURLLen    = 2048
+	maxChatIDLen        = 128
+	maxDockerTimeout    = 3600
+	maxAutoDrainMinutes = 1440
 )
 
 // NotificationsConfig is the persisted notification settings. Secrets stay in
@@ -71,6 +74,17 @@ type SafetyConfig struct {
 	CooldownSeconds       int  `json:"cooldown_seconds"`
 }
 
+// AutoDrainConfig is the experimental smart drain. It stays off by default and
+// never runs host commands without a notification plus YES or timeout.
+type AutoDrainConfig struct {
+	Enabled                 bool     `json:"enabled"`
+	BatteryThresholdPercent int      `json:"battery_threshold_percent"`
+	PreNotificationMinutes  int      `json:"pre_notification_minutes"`
+	ResponseTimeoutMinutes  int      `json:"response_timeout_minutes"`
+	NotificationServices    []string `json:"notification_services"`
+	OnUserNo                string   `json:"on_user_no"`
+}
+
 type ExecutionStatus struct {
 	Notifications string `json:"notifications"`
 	Shutdown      string `json:"shutdown"`
@@ -83,6 +97,7 @@ type APIConfig struct {
 	Shutdown        ShutdownConfig    `json:"shutdown"`
 	Docker          DockerConfig      `json:"docker"`
 	Safety          SafetyConfig      `json:"safety"`
+	AutoDrain       AutoDrainConfig   `json:"auto_drain"`
 	AuthEnabled     bool              `json:"auth_enabled"`
 	TokenConfigured bool              `json:"token_configured"`
 	TokenCreatedAt  string            `json:"token_created_at,omitempty"`
@@ -116,6 +131,17 @@ func DefaultSafety() SafetyConfig {
 	}
 }
 
+func DefaultAutoDrain() AutoDrainConfig {
+	return AutoDrainConfig{
+		Enabled:                 false,
+		BatteryThresholdPercent: DefaultAutoDrainThreshold,
+		PreNotificationMinutes:  DefaultAutoDrainPreNotifyMinutes,
+		ResponseTimeoutMinutes:  DefaultAutoDrainResponseMinutes,
+		NotificationServices:    []string{NotifyProviderNtfy},
+		OnUserNo:                AutoDrainOnUserNoContinue,
+	}
+}
+
 func StoredOnlyExecution() ExecutionStatus {
 	return ExecutionStatus{
 		Notifications: ExecutionStoredOnly,
@@ -132,6 +158,7 @@ func (c Config) APIView() APIConfig {
 		Shutdown:        c.Shutdown,
 		Docker:          c.Docker,
 		Safety:          c.Safety,
+		AutoDrain:       c.AutoDrain,
 		AuthEnabled:     view.AuthEnabled,
 		TokenConfigured: view.TokenConfigured,
 		TokenCreatedAt:  view.TokenCreatedAt,
@@ -144,9 +171,10 @@ func (c Config) APIView() APIConfig {
 		},
 		Notes: []string{
 			"Notification delivery runs only when a provider is configured and enabled.",
-			"Automatic low-battery shutdown is not executed in this alpha. The safety controller remains a recorder.",
+			"Automatic low-battery shutdown is not executed by the safety controller. The safety controller remains a recorder.",
+			"Smart automatic drain is experimental and off by default. It never runs without a notification, and host commands still require docker.stop_enabled, safety.dry_run=false, and actions.real_enabled=true.",
 			"Manual Docker drain and poweroff are experimental, disabled by default, and require actions.real_enabled=true, safety.dry_run=false, and explicit confirmation. Do not enable them on an important machine.",
-			"GET telemetry, capabilities, discover, power, events, safety, healthz, auth/status, actions/status, and actions/preflight stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
+			"GET telemetry, capabilities, discover, power, events, safety, auto-drain/status, healthz, auth/status, actions/status, and actions/preflight stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
 			DiskEditRestartMessage,
 		},
 	}
@@ -262,6 +290,68 @@ func (s *SafetyConfig) normalize() error {
 	return nil
 }
 
+func (a *AutoDrainConfig) normalize() error {
+	if err := validatePercent("battery_threshold_percent", a.BatteryThresholdPercent); err != nil {
+		return err
+	}
+	if a.BatteryThresholdPercent == 0 {
+		a.BatteryThresholdPercent = DefaultAutoDrainThreshold
+	}
+	if a.PreNotificationMinutes < 0 || a.PreNotificationMinutes > maxAutoDrainMinutes {
+		return invalidConfig("auto_drain pre_notification_minutes must be between 0 and 1440")
+	}
+	if a.PreNotificationMinutes == 0 {
+		a.PreNotificationMinutes = DefaultAutoDrainPreNotifyMinutes
+	}
+	if a.ResponseTimeoutMinutes < 0 || a.ResponseTimeoutMinutes > maxAutoDrainMinutes {
+		return invalidConfig("auto_drain response_timeout_minutes must be between 0 and 1440")
+	}
+	if a.ResponseTimeoutMinutes == 0 {
+		a.ResponseTimeoutMinutes = DefaultAutoDrainResponseMinutes
+	}
+	a.OnUserNo = strings.ToLower(strings.TrimSpace(a.OnUserNo))
+	if a.OnUserNo == "" {
+		a.OnUserNo = AutoDrainOnUserNoContinue
+	}
+	if a.OnUserNo != AutoDrainOnUserNoContinue {
+		return invalidConfig("auto_drain on_user_no must be continue_on_battery")
+	}
+	a.NotificationServices = normalizeNotificationServices(a.NotificationServices)
+	return nil
+}
+
+func normalizeNotificationServices(in []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		name := strings.ToLower(strings.TrimSpace(raw))
+		switch name {
+		case NotifyProviderNtfy, NotifyProviderTelegram, NotifyProviderDiscord, NotifyProviderWebhook:
+		default:
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if len(out) == 0 {
+		return []string{NotifyProviderNtfy}
+	}
+	return out
+}
+
+func (a AutoDrainConfig) AllowsProvider(provider string) bool {
+	p := strings.ToLower(strings.TrimSpace(provider))
+	for _, name := range a.NotificationServices {
+		if name == p {
+			return true
+		}
+	}
+	return false
+}
+
 func validatePercent(name string, value int) error {
 	if value < 0 || value > 100 {
 		return invalidConfig(name + " must be between 0 and 100")
@@ -306,6 +396,15 @@ type SafetyPatch struct {
 	RequireACLoss         *bool `json:"require_ac_loss"`
 	MinimumBatteryPercent *int  `json:"minimum_battery_percent"`
 	CooldownSeconds       *int  `json:"cooldown_seconds"`
+}
+
+type AutoDrainPatch struct {
+	Enabled                 *bool    `json:"enabled"`
+	BatteryThresholdPercent *int     `json:"battery_threshold_percent"`
+	PreNotificationMinutes  *int     `json:"pre_notification_minutes"`
+	ResponseTimeoutMinutes  *int     `json:"response_timeout_minutes"`
+	NotificationServices    []string `json:"notification_services"`
+	OnUserNo                *string  `json:"on_user_no"`
 }
 
 func (n NotificationsConfig) Apply(p NotificationsPatch) (NotificationsConfig, error) {
@@ -382,6 +481,32 @@ func (s SafetyConfig) Apply(p SafetyPatch) (SafetyConfig, error) {
 	}
 	if err := out.normalize(); err != nil {
 		return SafetyConfig{}, err
+	}
+	return out, nil
+}
+
+func (a AutoDrainConfig) Apply(p AutoDrainPatch) (AutoDrainConfig, error) {
+	out := a
+	if p.Enabled != nil {
+		out.Enabled = *p.Enabled
+	}
+	if p.BatteryThresholdPercent != nil {
+		out.BatteryThresholdPercent = *p.BatteryThresholdPercent
+	}
+	if p.PreNotificationMinutes != nil {
+		out.PreNotificationMinutes = *p.PreNotificationMinutes
+	}
+	if p.ResponseTimeoutMinutes != nil {
+		out.ResponseTimeoutMinutes = *p.ResponseTimeoutMinutes
+	}
+	if p.NotificationServices != nil {
+		out.NotificationServices = append([]string{}, p.NotificationServices...)
+	}
+	if p.OnUserNo != nil {
+		out.OnUserNo = *p.OnUserNo
+	}
+	if err := out.normalize(); err != nil {
+		return AutoDrainConfig{}, err
 	}
 	return out, nil
 }

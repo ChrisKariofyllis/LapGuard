@@ -72,6 +72,8 @@ func TestProtectedPOSTAndPUT(t *testing.T) {
 		{http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`},
 		{http.MethodPost, "/api/v1/actions/docker-drain", `{"confirm":"STOP_DOCKER"}`},
 		{http.MethodPost, "/api/v1/safety/test", `{"scenario":"warning"}`},
+		{http.MethodPut, "/api/v1/auto-drain/config", `{"enabled":false}`},
+		{http.MethodPost, "/api/v1/auto-drain/respond", `{"action":"no"}`},
 	}
 	for _, tc := range paths {
 		rec := httptest.NewRecorder()
@@ -92,6 +94,7 @@ func TestGETTelemetryReadableWhenAuthEnabled(t *testing.T) {
 		"/api/v1/power",
 		"/api/v1/events",
 		"/api/v1/safety",
+		"/api/v1/auto-drain/status",
 		"/api/v1/healthz",
 		"/api/v1/auth/status",
 		"/api/v1/actions/status",

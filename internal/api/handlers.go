@@ -37,6 +37,7 @@ type Server struct {
 	events      *storage.Store
 	notifier    *notify.Service
 	safety      *safety.Controller
+	autoDrain   *safety.AutoDrain
 	rec         *safety.RecordingExecutor
 	realRun     actions.Runner
 	testActor   safety.ActionExecutor
@@ -86,6 +87,21 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 		Executor: rec,
 		Logger:   log,
 	})
+	s.autoDrain = safety.NewAutoDrain(safety.AutoDrainOptions{
+		Interval: interval,
+		Config:   func() config.Config { return s.currentConfig() },
+		Read:     s.safetyRead,
+		Notify: func(ctx context.Context, event notify.NotificationEvent) error {
+			n := s.Notifier()
+			if n == nil {
+				return notify.ErrNotConfigured
+			}
+			return n.Send(ctx, event)
+		},
+		Executor: rec,
+		Live:     s.manualExecutor,
+		Logger:   log,
+	})
 	return s
 }
 
@@ -93,6 +109,12 @@ func (s *Server) Safety() *safety.Controller {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.safety
+}
+
+func (s *Server) AutoDrain() *safety.AutoDrain {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.autoDrain
 }
 
 func (s *Server) Notifier() *notify.Service {
@@ -135,6 +157,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)
 	mux.HandleFunc("POST /api/v1/safety/test", s.secureWrite(s.handleTestSafety))
+	mux.HandleFunc("GET /api/v1/auto-drain/status", s.handleGetAutoDrain)
+	mux.HandleFunc("PUT /api/v1/auto-drain/config", s.secureWrite(s.handlePutAutoDrainConfig))
+	mux.HandleFunc("POST /api/v1/auto-drain/respond", s.secureWrite(s.handleAutoDrainRespond))
 	mux.HandleFunc("GET /api/v1/healthz", s.handleHealthz)
 	mux.HandleFunc("GET /api/v1/auth/status", s.handleAuthStatus)
 	mux.HandleFunc("POST /api/v1/auth/rotate", s.secureAuthAdmin(s.handleAuthRotate))
@@ -372,6 +397,9 @@ func (s *Server) handleAPIOnlyRoot(w http.ResponseWriter, r *http.Request) {
 			"events":               "/api/v1/events",
 			"safety":               "/api/v1/safety",
 			"safety_test":          "/api/v1/safety/test",
+			"auto_drain_status":    "/api/v1/auto-drain/status",
+			"auto_drain_config":    "/api/v1/auto-drain/config",
+			"auto_drain_respond":   "/api/v1/auto-drain/respond",
 			"auth_status":          "/api/v1/auth/status",
 		},
 	})
@@ -422,7 +450,7 @@ func withMiddleware(next http.Handler, log *slog.Logger) http.Handler {
 		}
 		setCORS(w, r)
 		next.ServeHTTP(w, r)
-		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" || r.URL.Path == "/api/v1/safety" || r.URL.Path == "/api/v1/auth/status" {
+		if r.URL.Path == "/api/v1/telemetry" || r.URL.Path == "/api/v1/healthz" || r.URL.Path == "/api/v1/power" || r.URL.Path == "/api/v1/events" || r.URL.Path == "/api/v1/safety" || r.URL.Path == "/api/v1/auto-drain/status" || r.URL.Path == "/api/v1/auth/status" {
 			return
 		}
 		log.Info("http",
