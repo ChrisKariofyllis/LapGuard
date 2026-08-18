@@ -84,30 +84,38 @@ type Snapshot struct {
 // Battery holds converted measurements. Pointers are omitted in JSON when the
 // corresponding sysfs file is missing or unreadable.
 type Battery struct {
-	Name                      string   `json:"name"`
-	Present                   bool     `json:"present"`
-	Status                    string   `json:"status,omitempty"`
-	CapacityPercent           *int     `json:"capacity_percent,omitempty"`
-	CapacityLevel             string   `json:"capacity_level,omitempty"`
-	VoltageNowV               *float64 `json:"voltage_now_v,omitempty"`
-	CurrentNowA               *float64 `json:"current_now_a,omitempty"`
-	PowerNowW                 *float64 `json:"power_now_w,omitempty"`
-	EnergyNowWh               *float64 `json:"energy_now_wh,omitempty"`
-	EnergyFullWh              *float64 `json:"energy_full_wh,omitempty"`
-	EnergyFullDesignWh        *float64 `json:"energy_full_design_wh,omitempty"`
-	ChargeNowAh               *float64 `json:"charge_now_ah,omitempty"`
-	ChargeFullAh              *float64 `json:"charge_full_ah,omitempty"`
-	ChargeFullDesignAh        *float64 `json:"charge_full_design_ah,omitempty"`
-	CycleCount                *int     `json:"cycle_count,omitempty"`
-	TemperatureC              *float64 `json:"temperature_c,omitempty"`
-	Alarm                     *int64   `json:"alarm,omitempty"`
-	Manufacturer              string   `json:"manufacturer,omitempty"`
-	ModelName                 string   `json:"model_name,omitempty"`
-	SerialNumber              string   `json:"serial_number,omitempty"`
-	Technology                string   `json:"technology,omitempty"`
-	ChargeStartThreshold      *int     `json:"charge_start_threshold,omitempty"`
-	ChargeEndThreshold        *int     `json:"charge_end_threshold,omitempty"`
-	PowerW                    *float64 `json:"power_w,omitempty"`
+	Name                 string   `json:"name"`
+	Present              bool     `json:"present"`
+	Status               string   `json:"status,omitempty"`
+	CapacityPercent      *int     `json:"capacity_percent,omitempty"`
+	CapacityLevel        string   `json:"capacity_level,omitempty"`
+	VoltageNowV          *float64 `json:"voltage_now_v,omitempty"`
+	CurrentNowA          *float64 `json:"current_now_a,omitempty"`
+	PowerNowW            *float64 `json:"power_now_w,omitempty"`
+	EnergyNowWh          *float64 `json:"energy_now_wh,omitempty"`
+	EnergyFullWh         *float64 `json:"energy_full_wh,omitempty"`
+	EnergyFullDesignWh   *float64 `json:"energy_full_design_wh,omitempty"`
+	ChargeNowAh          *float64 `json:"charge_now_ah,omitempty"`
+	ChargeFullAh         *float64 `json:"charge_full_ah,omitempty"`
+	ChargeFullDesignAh   *float64 `json:"charge_full_design_ah,omitempty"`
+	CycleCount           *int     `json:"cycle_count,omitempty"`
+	TemperatureC         *float64 `json:"temperature_c,omitempty"`
+	Alarm                *int64   `json:"alarm,omitempty"`
+	Manufacturer         string   `json:"manufacturer,omitempty"`
+	ModelName            string   `json:"model_name,omitempty"`
+	SerialNumber         string   `json:"serial_number,omitempty"`
+	Technology           string   `json:"technology,omitempty"`
+	ChargeStartThreshold *int     `json:"charge_start_threshold,omitempty"`
+	ChargeEndThreshold   *int     `json:"charge_end_threshold,omitempty"`
+	// PowerW is the signed battery-side wattage kept for API compatibility.
+	// Negative = discharging, positive = charging. Meaning depends on
+	// power_direction; prefer battery_power_w + power_direction.
+	PowerW *float64 `json:"power_w,omitempty"`
+	// BatteryPowerW is the unsigned magnitude of PowerW (pack charge or
+	// discharge power, not total system consumption).
+	BatteryPowerW             *float64 `json:"battery_power_w,omitempty"`
+	PowerDirection            string   `json:"power_direction"`
+	PowerLabel                string   `json:"power_label"`
 	HealthPercent             *float64 `json:"health_percent,omitempty"`
 	NamingConvention          string   `json:"naming_convention,omitempty"`
 	PowerCalculation          string   `json:"power_calculation,omitempty"`
@@ -134,6 +142,12 @@ func (s *Snapshot) enrich() {
 		s.Battery.VoltageNowV,
 		s.Battery.CurrentNowA,
 		s.Battery.Status,
+	)
+	s.Battery.BatteryPowerW = PowerMagnitude(s.Battery.PowerW)
+	s.Battery.PowerDirection, s.Battery.PowerLabel = ClassifyPowerDirection(
+		s.Battery.Status,
+		s.Battery.CurrentNowA,
+		s.Battery.PowerW,
 	)
 	s.Battery.PowerCalculation = PowerCalculationMethod(
 		s.Battery.PowerNowW != nil,

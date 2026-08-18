@@ -30,6 +30,12 @@ func TestMockProviderSnapshot(t *testing.T) {
 	if snap.Battery.PowerW == nil || *snap.Battery.PowerW != 6.05 {
 		t.Fatalf("power_w %+v", snap.Battery.PowerW)
 	}
+	if snap.Battery.BatteryPowerW == nil || *snap.Battery.BatteryPowerW != 6.05 {
+		t.Fatalf("battery_power_w %+v", snap.Battery.BatteryPowerW)
+	}
+	if snap.Battery.PowerDirection != DirectionCharge || snap.Battery.PowerLabel != LabelChargingPower {
+		t.Fatalf("direction %q label %q", snap.Battery.PowerDirection, snap.Battery.PowerLabel)
+	}
 	if snap.Battery.EstimatedRuntimeAvailable {
 		t.Fatal("charging mock must not estimate runtime")
 	}

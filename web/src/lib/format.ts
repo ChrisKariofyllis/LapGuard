@@ -16,6 +16,25 @@ export function abs(value: number | undefined): number | undefined {
   return value === undefined ? undefined : Math.abs(value);
 }
 
+export function powerHeading(battery: {
+  power_label?: string;
+  power_direction?: string;
+} | undefined): string {
+  if (battery?.power_label) {
+    return battery.power_label;
+  }
+  switch (battery?.power_direction) {
+    case 'charge':
+      return 'Battery charging power';
+    case 'discharge':
+      return 'Battery discharge power';
+    case 'idle':
+      return 'Battery idle';
+    default:
+      return 'Power unavailable';
+  }
+}
+
 export function statusLabel(status: string | undefined, present: boolean): string {
   if (!present) {
     return 'No battery';

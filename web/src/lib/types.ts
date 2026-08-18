@@ -22,6 +22,9 @@ export type Battery = {
   charge_start_threshold?: number;
   charge_end_threshold?: number;
   power_w?: number;
+  battery_power_w?: number;
+  power_direction?: 'charge' | 'discharge' | 'idle' | 'unknown';
+  power_label?: string;
   health_percent?: number;
   naming_convention?: string;
   power_calculation?: string;

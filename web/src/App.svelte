@@ -10,6 +10,7 @@
     fmtInt,
     fmtNumber,
     healthTone,
+    powerHeading as batteryPowerHeading,
     statusLabel,
     statusTone,
     type StatusTone,
@@ -30,10 +31,11 @@
   const present = $derived(battery?.present ?? false);
   const capacity = $derived(battery?.capacity_percent);
   const tone = $derived(statusTone(battery?.status, present));
-  const power = $derived(abs(battery?.power_w));
+  const power = $derived(battery?.battery_power_w ?? abs(battery?.power_w));
   const powerMode = $derived(battery?.power_calculation ?? capabilities?.power_calculation);
   const derivedPower = $derived(powerMode === 'current_voltage');
-  const powerHeading = $derived(derivedPower ? 'Derived power' : 'Instantaneous power');
+  const powerHeading = $derived(batteryPowerHeading(battery));
+  const powerDirection = $derived(battery?.power_direction);
 
   function applyTheme(next: boolean) {
     dark = next;
@@ -198,19 +200,19 @@
             <p class="mt-1 text-sm text-mist">
               {#if !present}
                 No pack detected. Auto-fallback to mock is available with <span class="font-mono">--provider mock</span>.
-              {:else if derivedPower}
-                Calculated from <span class="font-mono">current_now × voltage_now</span>
-                {#if tone === 'discharge'}
-                  · drawing from the battery
-                {:else if tone === 'charge'}
-                  · charging the pack
-                {/if}
-              {:else if tone === 'discharge'}
-                Drawing from the battery
-              {:else if tone === 'charge'}
-                Charging the pack
               {:else}
-                Power is stable
+                {#if derivedPower && powerDirection !== 'unknown'}
+                  Calculated from <span class="font-mono">current_now × voltage_now</span>.
+                {/if}
+                {#if powerDirection === 'charge'}
+                  Charging power into the battery, not total system consumption.
+                {:else if powerDirection === 'discharge'}
+                  Power drawn from the battery.
+                {:else if powerDirection === 'idle'}
+                  Pack at rest (Full / Not charging).
+                {:else}
+                  Battery-side power is unavailable.
+                {/if}
               {/if}
             </p>
           </div>
@@ -241,9 +243,9 @@
         <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.current_now_a, 3, ' A')}</p>
       </article>
       <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">{derivedPower ? 'Power estimate' : 'Raw power_now'}</p>
+        <p class="text-xs text-mist">{powerHeading}</p>
         <p class="mt-2 font-mono text-lg">
-          {fmtNumber(derivedPower ? power : battery?.power_now_w, 2, ' W')}
+          {fmtNumber(power, 2, ' W')}
         </p>
         {#if derivedPower}
           <p class="mt-1 text-[11px] text-mist">current_now × voltage_now</p>

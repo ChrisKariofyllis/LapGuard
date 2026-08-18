@@ -41,13 +41,13 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		DetectionMethod: "sysfs:" + battery.FieldPowerNow,
 	}
 	if rawPower.Enabled {
-		rawPower.Recommendation = "Instantaneous power is read from the power_now sysfs file."
+		rawPower.Recommendation = "Battery-side watts are read from the power_now sysfs file. While charging this is power into the pack, not total system consumption."
 	} else {
 		rawPower.WhyNot = "sysfs power_now is not present"
 		if derived {
-			rawPower.Recommendation = "This is expected on packs like the Fujitsu A3510. Use the derived power estimate instead."
+			rawPower.Recommendation = "This is expected on packs like the Fujitsu A3510. Use the derived battery-side power estimate instead."
 		} else {
-			rawPower.Recommendation = "No power_now file and no current/voltage pair to estimate watts."
+			rawPower.Recommendation = "No power_now file and no current/voltage pair to estimate battery watts."
 		}
 	}
 
@@ -58,13 +58,13 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		DetectionMethod: "derived:current_now*voltage_now",
 	}
 	if derivedPower.Enabled {
-		derivedPower.Recommendation = "Power estimate is calculated from current_now × voltage_now. 0 W is valid when current_now is zero."
+		derivedPower.Recommendation = "Battery-side power is calculated from current_now × voltage_now. While charging this is charging power into the pack, not total system consumption. 0 W is valid when current_now is zero."
 	} else if raw {
 		derivedPower.WhyNot = "current_now and/or voltage_now is missing"
-		derivedPower.Recommendation = "Not required; sysfs power_now supplies instantaneous power."
+		derivedPower.Recommendation = "Not required; sysfs power_now supplies battery-side watts."
 	} else {
 		derivedPower.WhyNot = "current_now and/or voltage_now is missing"
-		derivedPower.Recommendation = "Power (W) cannot be estimated on this hardware."
+		derivedPower.Recommendation = "Battery power (W) cannot be estimated on this hardware."
 	}
 
 	cv := FeatureStatus{
@@ -74,7 +74,7 @@ func featureStatuses(report CapabilityReport) []FeatureStatus {
 		DetectionMethod: "sysfs:current_now+voltage_now",
 	}
 	if cv.Enabled {
-		cv.Recommendation = "current_now and voltage_now are present and used for the derived power estimate."
+		cv.Recommendation = "current_now and voltage_now are present and used for the derived battery-side power estimate."
 	} else {
 		cv.WhyNot = "current_now and/or voltage_now is missing"
 		cv.Recommendation = "Voltage/current gauges are unavailable; rely on power_now or capacity."

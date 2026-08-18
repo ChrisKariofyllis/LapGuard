@@ -16,14 +16,38 @@ Charge-threshold method preference:
 
 ## Power readings
 
-LapGuard separates the raw sysfs file from the displayed wattage:
+LapGuard reports **battery-side power**, not total laptop/system consumption.
 
 | Flag | Meaning |
 | --- | --- |
 | `raw_power_now_supported` | `/sys/class/power_supply/BAT*/power_now` exists |
 | `derived_power_supported` | `current_now` and `voltage_now` exist, so watts = current × voltage |
 
-The UI shows **Derived power** / **Power estimate** when only the current×voltage path is available. That is not “unsupported power”. A calculated **0 W** is valid when `current_now` is zero (idle / full).
+On a **Gigabyte Aero 16**, status `Charging` at 5% with derived
+`current_now × voltage_now` was about **36 W**. That value is **charging power
+into the battery**, not what the whole machine was drawing from the wall.
+
+| Pack state | What the watts mean |
+| --- | --- |
+| Charging | Power flowing into the battery |
+| Discharging | Power drawn from the battery |
+| Full / Not charging with `current_now=0` | **0 W** (idle) — a valid reading, not a missing sensor |
+
+Telemetry fields:
+
+- `power_w` — kept for compatibility. Signed: negative while discharging,
+  positive while charging. Interpret it together with `power_direction`.
+- `battery_power_w` — the same magnitude, always ≥ 0
+- `power_direction` — `charge` \| `discharge` \| `idle` \| `unknown`
+- `power_label` — `Battery charging power` / `Battery discharge power` /
+  `Battery idle` / `Power unavailable`
+
+The dashboard uses those labels. It does **not** call charging watts
+“instantaneous laptop power” or “power consumption”. When the value is derived,
+the UI still shows the `current_now × voltage_now` formula.
+
+Estimated runtime stays available **only while discharging**. It is never
+computed while charging or connected to AC.
 
 ## AC adapters
 
@@ -41,6 +65,7 @@ Full A3510 field lists are in the section below this table.
 | Dell XPS (typical, mocked) | Profile | `charge_*` plus `charge_control_*` | **sysfs** | `dell_wmi` / `dell_smbios`. Often no `power_now`; derived power from current × voltage. |
 | ASUS notebook (typical, mocked) | Profile | `charge_*`, often end-threshold only | **sysfs** | `asus_wmi` / `asus_nb_wmi`. Many models only expose `charge_control_end_threshold`. |
 | Generic ACPI battery (mocked) | Profile | `energy_*` or `charge_*` | **none** | Power from `power_now` or derived `current_now × voltage_now`. |
+| Gigabyte Aero 16 | Observed charging semantics | derived `current_now × voltage_now` | — | Charging at 5% ≈ 36 W was pack charge power, not system load. 0 W when Full/Not charging and `current_now=0`. |
 
 ## Fujitsu Lifebook A3510 (verified)
 
@@ -66,8 +91,9 @@ Verified capabilities:
 - Battery name: **BAT1**
 - `naming_convention`: `charge`
 - `raw_power_now_supported`: **false**
-- `derived_power_supported`: **true** — watts = `current_now × voltage_now`
+- `derived_power_supported`: **true** — battery-side watts = `current_now × voltage_now`
 - **0 W** is a valid reading when `current_now` is zero (idle / full), not a missing sensor
+- Watts are pack charge/discharge power, not total system consumption
 - LapGuard derives energy (Wh) from charge (Ah) × voltage where those fields exist (`charge_*` × `voltage_now`)
 - Charge-threshold method: **none**. `fujitsu_laptop` is loaded but does not register charge control (typical dmesg: *Unable to register battery charge control*). TLP is detected and still reports `tlp_can_set_thresholds=false`.
 

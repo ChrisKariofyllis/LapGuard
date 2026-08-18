@@ -42,6 +42,15 @@ func TestTelemetryFromSysfsFixture(t *testing.T) {
 	if snap.Battery.PowerW == nil || *snap.Battery.PowerW != -14.082 {
 		t.Fatalf("power_w %+v", snap.Battery.PowerW)
 	}
+	if snap.Battery.BatteryPowerW == nil || *snap.Battery.BatteryPowerW != 14.082 {
+		t.Fatalf("battery_power_w %+v", snap.Battery.BatteryPowerW)
+	}
+	if snap.Battery.PowerDirection != battery.DirectionDischarge {
+		t.Fatalf("power_direction %q", snap.Battery.PowerDirection)
+	}
+	if snap.Battery.PowerLabel != battery.LabelDischargePower {
+		t.Fatalf("power_label %q", snap.Battery.PowerLabel)
+	}
 	if snap.Battery.HealthPercent == nil || *snap.Battery.HealthPercent != 84.2 {
 		t.Fatalf("health %+v", snap.Battery.HealthPercent)
 	}

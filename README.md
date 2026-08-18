@@ -32,9 +32,10 @@ execution are out of scope for this alpha.
 
 ## Current features
 
-- Battery telemetry from sysfs (`energy_*` and `charge_*`), with derived watts
-  from `current_now × voltage_now` when `power_now` is missing
-- Estimated time remaining while discharging (when energy and power are usable)
+- Battery telemetry from sysfs (`energy_*` and `charge_*`), with **battery-side**
+  watts from `power_now` or derived `current_now × voltage_now`. While charging
+  that value is power into the pack, not total laptop consumption
+- Estimated time remaining while discharging (never while charging or on AC)
 - Hardware auto-discovery: batteries, AC adapters, kernel modules, TLP/UPower
 - Privacy-safe `lapguard discover --report` export for GitHub compatibility issues
 - Charge-threshold **detection** (`sysfs` → `tlp` → `none`)
@@ -222,6 +223,16 @@ Turn `dry_run` off after a successful test from the dashboard or
 
 ## How it works (short)
 
+**Battery power.** LapGuard reports **battery-side** watts, not total system
+power consumption. `GET /api/v1/telemetry` keeps `power_w` (signed: negative
+while discharging, positive while charging) for compatibility. Prefer
+`battery_power_w` (magnitude) plus `power_direction` (`charge` / `discharge` /
+`idle` / `unknown`) and `power_label`. On a Gigabyte Aero 16, charging at 5%
+showed about 36 W from `current_now × voltage_now` — that was charging power
+into the pack. Discharging is power drawn from the pack. `Full` / `Not charging`
+with `current_now=0` is 0 W (`idle`). Estimated runtime is available only while
+discharging.
+
 **Power source.** LapGuard polls `/sys/class/power_supply/` for `type=Mains`
 and reads `online`. Adapter names are discovered, not hardcoded. A new AC
 state must stay stable for 10 seconds (default) before
@@ -248,7 +259,7 @@ modules, or tools exist. Missing hardware is `none` plus `why_not`. See
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/v1/telemetry` | Battery snapshot, power (W), health (%) |
+| GET | `/api/v1/telemetry` | Battery snapshot, `power_w` / `battery_power_w`, health (%) |
 | GET | `/api/v1/discover` | Re-run detection; full `CapabilityReport` |
 | GET | `/api/v1/capabilities` | UI payload: `detection_method`, `recommendation`, `why_not` |
 | GET | `/api/v1/config` | Notifications, shutdown, Docker, safety settings |

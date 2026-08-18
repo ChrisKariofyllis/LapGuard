@@ -15,15 +15,28 @@ const (
 	NamingCharge = "charge"
 	NamingBoth   = "both"
 	NamingNone   = "none"
+
+	DirectionCharge    = "charge"
+	DirectionDischarge = "discharge"
+	DirectionIdle      = "idle"
+	DirectionUnknown   = "unknown"
+
+	LabelChargingPower    = "Battery charging power"
+	LabelDischargePower   = "Battery discharge power"
+	LabelIdle             = "Battery idle"
+	LabelPowerUnavailable = "Power unavailable"
 )
 
-// PowerWatts returns instantaneous battery power in watts.
+// PowerWatts returns battery-side power in watts, not total laptop consumption.
 //
 // Prefer power_now when present. Linux reports it as an unsigned magnitude on
 // many drivers, so the sign is taken from current_now (negative = discharging)
 // or from status. When power_now is missing, power is voltage_now * current_now.
 //
-// Sign convention: negative means discharging, positive means charging.
+// Sign convention (kept on power_w for compatibility): negative means
+// discharging, positive means charging. While charging the magnitude is
+// power into the pack. While discharging it is power drawn from the pack.
+// Full / Not charging with current_now = 0 is 0 W.
 func PowerWatts(powerNowW, voltageV, currentA *float64, status string) *float64 {
 	var watts float64
 	switch {
@@ -54,6 +67,65 @@ func applyPowerSign(absWatts float64, currentA *float64, status string) float64 
 		}
 	}
 	return absWatts
+}
+
+func nearlyZero(v float64) bool {
+	return math.Abs(v) < 1e-9
+}
+
+// PowerMagnitude is the unsigned battery-side wattage (battery_power_w).
+func PowerMagnitude(powerW *float64) *float64 {
+	if powerW == nil {
+		return nil
+	}
+	mag := math.Abs(*powerW)
+	return &mag
+}
+
+// ClassifyPowerDirection returns power_direction and power_label.
+//
+//   - charge: status Charging, or current_now > 0 when status does not contradict it
+//   - discharge: status Discharging, or current_now < 0 as a fallback
+//   - idle: status Full, or Not charging with zero current
+//   - unknown: direction cannot be determined
+func ClassifyPowerDirection(status string, currentA, powerW *float64) (direction, label string) {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "charging":
+		return DirectionCharge, LabelChargingPower
+	case "discharging":
+		return DirectionDischarge, LabelDischargePower
+	case "full":
+		return DirectionIdle, LabelIdle
+	case "not charging":
+		if currentA == nil || nearlyZero(*currentA) {
+			return DirectionIdle, LabelIdle
+		}
+		if *currentA > 0 {
+			return DirectionCharge, LabelChargingPower
+		}
+		return DirectionDischarge, LabelDischargePower
+	}
+	if currentA != nil {
+		switch {
+		case *currentA > 0 && !nearlyZero(*currentA):
+			return DirectionCharge, LabelChargingPower
+		case *currentA < 0:
+			return DirectionDischarge, LabelDischargePower
+		default:
+			return DirectionIdle, LabelIdle
+		}
+	}
+	if powerW != nil {
+		switch {
+		case *powerW > 0 && !nearlyZero(*powerW):
+			return DirectionCharge, LabelChargingPower
+		case *powerW < 0:
+			return DirectionDischarge, LabelDischargePower
+		default:
+			return DirectionIdle, LabelIdle
+		}
+	}
+	return DirectionUnknown, LabelPowerUnavailable
 }
 
 // HealthPercent is full / design * 100. It works for both energy (Wh) and
