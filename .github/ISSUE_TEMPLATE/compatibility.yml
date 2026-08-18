@@ -9,7 +9,8 @@ body:
 
         **Privacy:** strip serial numbers, usernames, hostnames that identify you, IP addresses, Tailscale names, tokens, passwords, and webhook URLs before pasting anything. Fake identifiers such as `TEST-BAT-001` are fine.
 
-        Use `GET /api/v1/discover` and `GET /api/v1/capabilities`. Do not paste `config.json`.
+        Use `lapguard discover --report` (or `--pretty`) and attach the JSON.
+        Do not paste `config.json` or unsanitized `GET /api/v1/discover` output.
   - type: input
     id: machine
     attributes:
@@ -94,8 +95,8 @@ body:
   - type: textarea
     id: discover
     attributes:
-      label: Redacted GET /api/v1/discover (or capabilities)
-      description: Paste JSON after removing serial_number, hostname if sensitive, and any URLs or tokens. Keep battery name, present, manufacturer/model if public, available fields, features, and why_not text.
+      label: Redacted `lapguard discover --report` JSON
+      description: Attach or paste the CLI export. It already omits serials, usernames, home paths, IPs, MACs, UUIDs, and secrets. Keep battery name, manufacturer/model, available fields, features, and why_not text.
       render: json
     validations:
       required: true

@@ -108,11 +108,27 @@ writeSupply(t, root, "ADP1", map[string]string{"type": "Mains", "online": "0"})
 
 ## Compatibility reports
 
-Hardware reports belong in GitHub using the **Compatibility report** issue
-template, or in a PR that updates [COMPATIBILITY.md](COMPATIBILITY.md).
+On the laptop, generate a privacy-safe JSON report:
+
+```bash
+lapguard discover --report > lapguard-compatibility-report.json
+# or:
+lapguard discover --report --pretty
+```
+
+Attach the file to a GitHub issue using the **Compatibility report** template,
+or include it in a PR that updates [COMPATIBILITY.md](COMPATIBILITY.md).
+
+The command runs the same hardware discovery as the daemon, then prints
+sanitized JSON on stdout. Serial numbers, usernames, home-directory paths, IP
+and MAC addresses, UUIDs, webhook URLs, tokens, passwords, and chat IDs are
+omitted. Manufacturer, model, OS, kernel, `BAT0`/`BAT1` names, naming
+convention, sysfs fields, power and charge-threshold methods, tools, modules,
+and feature capabilities are kept.
 
 Do not change verified Fujitsu Lifebook A3510 facts unless you re-ran
-discovery on that machine.
+discovery on that machine. Do not paste `config.json` or unsanitized
+`GET /api/v1/discover` output.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the field list to record
 (battery name, naming convention, power path, threshold method, modules, TLP).
@@ -123,12 +139,14 @@ Before a report, log, screenshot, or PR, remove:
 
 - Battery and device **serial numbers**
 - **Usernames** and home-directory paths that identify a person
-- **IP addresses**, Tailscale names, and MagicDNS hostnames
+- **IP addresses**, MAC addresses, UUIDs, Tailscale names, and MagicDNS hostnames
 - **Tokens**, passwords, cookie headers
 - **Webhook URLs** (ntfy topics, Telegram bot URLs, Discord webhooks, generic HTTPS endpoints)
 
-`config.json` must never be pasted. The API already redacts `webhook_url` and
-`chat_id`; still treat the file as secret (`0600`).
+`config.json` must never be pasted. Prefer `lapguard discover --report` over
+API JSON. The HTTP API still returns serials and hostnames for local use; the
+CLI export is the supported public report. The API already redacts
+`webhook_url` and `chat_id`; still treat `config.json` as secret (`0600`).
 
 Fixture serials in this repo are synthetic and may stay.
 

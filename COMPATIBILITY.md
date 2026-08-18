@@ -97,9 +97,9 @@ Do not record battery serial numbers, webhook URLs, tokens, passwords, usernames
 
 ## How to add a laptop to this list
 
-1. Run LapGuard on the machine and open `GET /api/v1/discover`.
+1. On the machine, run `lapguard discover --report > lapguard-compatibility-report.json` (add `--pretty` to indent).
 2. Confirm `features.charge_thresholds` is `sysfs`, `tlp`, or `none`.
 3. Record `raw_power_now_supported` vs `derived_power_supported` (absence of `power_now` is not a failure if current×voltage works).
 4. Record the battery naming convention (`energy` / `charge` / `both`) and any vendor module. For charge-named packs, note that energy (Wh) is derived from charge × voltage.
-5. **Privacy:** omit serial numbers, usernames, IP addresses, tokens, and webhook URLs. Do not paste `config.json`.
-6. Open a GitHub issue with the **Compatibility report** template, or send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.
+5. **Privacy:** the CLI export already omits serial numbers, usernames, home paths, IP addresses, tokens, and webhook URLs. Do not paste `config.json` or unsanitized `GET /api/v1/discover` JSON.
+6. Open a GitHub issue with the **Compatibility report** template and attach the JSON, or send a PR updating this table. Mock profiles for CI live in `internal/discovery/laptops_test.go`.

@@ -36,6 +36,7 @@ execution are out of scope for this alpha.
   from `current_now × voltage_now` when `power_now` is missing
 - Estimated time remaining while discharging (when energy and power are usable)
 - Hardware auto-discovery: batteries, AC adapters, kernel modules, TLP/UPower
+- Privacy-safe `lapguard discover --report` export for GitHub compatibility issues
 - Charge-threshold **detection** (`sysfs` → `tlp` → `none`)
 - AC power-loss watcher with debounce and a local SQLite outage log
 - Optional notifications (ntfy, Telegram, Discord) — **off by default**
@@ -137,8 +138,9 @@ The API has no login, CSRF tokens, or TLS of its own.
   still present on disk. Never commit that file.
 - Notifications, when enabled, send battery/AC events to a third party.
   Treat the webhook URL as a secret.
-- Discovery reports hostname, kernel, and battery model. Strip serials and
-  identifying hostnames before sharing output.
+- Discovery reports hostname, kernel, and battery model on the HTTP API.
+  Use `lapguard discover --report` (not raw API JSON) when sharing a
+  compatibility report.
 - The process should not run as root for alpha. The systemd templates do
   not grant sudo or `CAP_SYS_BOOT`.
 - Dry-run safety means a low battery will **not** stop workloads or power
@@ -146,15 +148,36 @@ The API has no login, CSRF tokens, or TLS of its own.
 
 ## Compatibility reports
 
-Please file what your laptop actually exposes. Use the GitHub **Compatibility
-report** issue template, or send a PR updating [COMPATIBILITY.md](COMPATIBILITY.md).
+Please file what your laptop actually exposes.
+
+On the machine, generate a privacy-safe JSON report and attach it to a GitHub
+**Compatibility report** issue, or include it in a PR that updates
+[COMPATIBILITY.md](COMPATIBILITY.md):
+
+```bash
+lapguard discover --report > lapguard-compatibility-report.json
+```
+
+Pretty-print to the terminal:
+
+```bash
+lapguard discover --report --pretty
+```
+
+The export includes manufacturer, model, OS, kernel, battery names (`BAT0` /
+`BAT1`), naming convention, available sysfs fields, power calculation method,
+charge-threshold method, detected tools and kernel modules, and feature
+capabilities. It **never** includes battery serial numbers, usernames, home
+directory paths, IP or MAC addresses, UUIDs, webhook URLs, tokens, passwords,
+or chat IDs.
+
+Do not paste `config.json`. Prefer `lapguard discover --report` over
+`GET /api/v1/discover` when sharing output: the API payload can include serials
+and hostnames.
 
 Record battery sysfs name (`BAT0` / `BAT1`), naming (`charge_*` vs `energy_*`),
 whether watts come from `power_now` or `current_now × voltage_now`, charge-
 threshold method (`sysfs` / `tlp` / `none`), and relevant vendor modules.
-
-**Privacy:** remove serial numbers, usernames, IP addresses, tokens, and
-webhook URLs before you paste logs or `GET /api/v1/discover` JSON.
 
 ## Notifications (optional)
 
@@ -245,8 +268,8 @@ modules, or tools exist. Missing hardware is `none` plus `why_not`. See
 ## Layout
 
 ```
-cmd/lapguard/main.go
-internal/discovery/          # sysfs / modules / tools / threshold detection
+cmd/lapguard/                # daemon + `discover --report` CLI
+internal/discovery/          # sysfs / modules / tools / threshold detection + sanitized export
 internal/battery/            # sysfs + mock telemetry (energy_* and charge_*)
 internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage event log
