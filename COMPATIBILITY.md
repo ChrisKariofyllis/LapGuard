@@ -56,17 +56,17 @@ Mains supplies are discovered by `type=Mains` and the `online` attribute. Names 
 
 ## Tested machines
 
-Full A3510 field lists are in the section below this table.
+Full field lists for verified machines are in the sections below this table.
 
 | Machine | Role | Battery sysfs | Charge thresholds | Notes |
 | --- | --- | --- | --- | --- |
 | Fujitsu Lifebook A3510 | Production target (verified) | **BAT1**, naming `charge` | **none** | No `power_now`, `temp`, or `charge_control_*`. Derived power. TLP cannot set thresholds. See below. |
+| Gigabyte Aero 16 | Verified on Zorin OS 18.1 | **BAT1**, `charge_*` with `current_now` and `voltage_now`; no `power_now` or `temp` | **none** | `asus_wmi` is loaded and TLP 1.6.1 is detected, but no writable charge-control attributes are exposed. Derived battery-side power and estimated runtime work. |
 | HP ProDesk | Development box | no pack | **none** | No `BAT*` supply. Provider `auto` falls back to mock telemetry. |
 | ThinkPad (typical, mocked) | Profile | `energy_*` plus `charge_control_*` | **sysfs** (TLP also present) | `thinkpad_acpi`. Method is **tlp** if sysfs charge control is missing and TLP NATACPI is active. |
 | Dell XPS (typical, mocked) | Profile | `charge_*` plus `charge_control_*` | **sysfs** | `dell_wmi` / `dell_smbios`. Often no `power_now`; derived power from current × voltage. |
 | ASUS notebook (typical, mocked) | Profile | `charge_*`, often end-threshold only | **sysfs** | `asus_wmi` / `asus_nb_wmi`. Many models only expose `charge_control_end_threshold`. |
 | Generic ACPI battery (mocked) | Profile | `energy_*` or `charge_*` | **none** | Power from `power_now` or derived `current_now × voltage_now`. |
-| Gigabyte Aero 16 | Observed charging semantics | derived `current_now × voltage_now` | — | Charging at 5% ≈ 36 W was pack charge power, not system load. 0 W when Full/Not charging and `current_now=0`. |
 
 ## Fujitsu Lifebook A3510 (verified)
 
@@ -97,6 +97,45 @@ Verified capabilities:
 - Watts are pack charge/discharge power, not total system consumption
 - LapGuard derives energy (Wh) from charge (Ah) × voltage where those fields exist (`charge_*` × `voltage_now`)
 - Charge-threshold method: **none**. `fujitsu_laptop` is loaded but does not register charge control (typical dmesg: *Unable to register battery charge control*). TLP is detected and still reports `tlp_can_set_thresholds=false`.
+
+Do not record battery serial numbers, webhook URLs, tokens, passwords, usernames, or IP addresses in this file.
+
+## Gigabyte Aero 16 (verified)
+
+Verified on **Zorin OS 18.1**, kernel **6.17.0-35-generic**. Real pack on **BAT1**. Naming convention is **charge**, not `energy_*`. This machine does **not** expose `power_now` or `temp`.
+
+Available sysfs fields:
+
+- `charge_now`, `charge_full`, `charge_full_design`
+- `current_now`, `voltage_now`
+- `cycle_count`, `alarm`
+- `capacity`, `capacity_level`, `present`, `status`
+- `manufacturer`, `model_name`, `technology`
+
+Not available:
+
+- `power_now`
+- `temp`
+- `charge_control_start_threshold`
+- `charge_control_end_threshold`
+
+Verified capabilities:
+
+- Battery name: **BAT1**
+- `naming_convention`: `charge`
+- `raw_power_now_supported`: **false**
+- `derived_power_supported`: **true** — power calculation is `current_now * voltage_now`
+- Watts are pack charge/discharge power, not total system consumption
+- Derived battery-side power and estimated runtime work
+- LapGuard derives energy (Wh) from charge (Ah) × voltage where those fields exist (`charge_*` × `voltage_now`)
+- Charge-threshold method: **none**. Charge-control sysfs attributes are not present, so thresholds are not writable on this tested Aero 16. That is a fact about this machine, not a claim that ASUS/Gigabyte charge limits are generally unsupported.
+- `asus_wmi` is loaded
+- TLP **1.6.1** is detected; `tlp_can_set_thresholds` is **false**
+- AC adapter **ADP1** is discovered via `type=Mains` and `online` (not a hardcoded name)
+- `power_loss_detection`: **true**
+- Notifications were not configured in this test
+
+`lapguard discover --report` does not start SQLite event storage or the safety controller. Absence of those flags in a compatibility export is not a hardware gap.
 
 Do not record battery serial numbers, webhook URLs, tokens, passwords, usernames, or IP addresses in this file.
 
