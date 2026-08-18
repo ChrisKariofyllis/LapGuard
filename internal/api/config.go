@@ -20,6 +20,7 @@ type settingsRequest struct {
 	Shutdown      *config.ShutdownPatch      `json:"shutdown"`
 	Docker        *config.DockerPatch        `json:"docker"`
 	Safety        *config.SafetyPatch        `json:"safety"`
+	Actions       *config.ActionsPatch       `json:"actions"`
 	Execution     json.RawMessage            `json:"execution"`
 	Notes         json.RawMessage            `json:"notes"`
 }
@@ -63,6 +64,13 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 			}
 			cfg.Safety = next
 		}
+		if req.Actions != nil {
+			next, err := cfg.Actions.Apply(*req.Actions)
+			if err != nil {
+				return err
+			}
+			cfg.Actions = next
+		}
 		return nil
 	})
 	if err != nil {
@@ -77,6 +85,8 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 		"docker_stop_enabled", view.Docker.StopEnabled,
 		"docker_timeout_seconds", view.Docker.TimeoutSeconds,
 		"auth_enabled", view.Auth.Enabled,
+		"actions_real_enabled", view.Actions.RealEnabled,
+		"safety_dry_run", view.Safety.DryRun,
 	)
 	s.audit(r, storage.AuditConfigUpdate, true, "config updated")
 	s.writeJSON(w, http.StatusOK, view.APIView())

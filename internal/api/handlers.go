@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"lapguard/internal/actions"
 	"lapguard/internal/battery"
 	"lapguard/internal/config"
 	"lapguard/internal/discovery"
@@ -32,10 +33,15 @@ type Server struct {
 	mu  sync.RWMutex
 	cfg config.Config
 
-	watcher  *power.Watcher
-	events   *storage.Store
-	notifier *notify.Service
-	safety   *safety.Controller
+	watcher    *power.Watcher
+	events     *storage.Store
+	notifier   *notify.Service
+	safety     *safety.Controller
+	rec        *safety.RecordingExecutor
+	realRun    actions.Runner
+	testActor  safety.ActionExecutor
+	testSource *power.Source
+	guard      actionGuard
 }
 
 func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc discovery.Reporter) *Server {
@@ -62,6 +68,8 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 	if interval <= 0 {
 		interval = config.DefaultPowerPoll
 	}
+	rec := safety.NewRecordingExecutor()
+	s.rec = rec
 	s.safety = safety.New(safety.Options{
 		Interval: interval,
 		Config:   func() config.Config { return s.currentConfig() },
@@ -73,7 +81,7 @@ func New(provider battery.Provider, cfg config.Config, log *slog.Logger, disc di
 			}
 			return n.Send(ctx, event)
 		},
-		Executor: safety.NewRecordingExecutor(),
+		Executor: rec,
 		Logger:   log,
 	})
 	return s
@@ -116,6 +124,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/config/notifications", s.secureWrite(s.handlePostNotifications))
 	mux.HandleFunc("POST /api/v1/config/shutdown", s.secureWrite(s.handlePostShutdown))
 	mux.HandleFunc("POST /api/v1/actions/test-notification", s.secureWrite(s.handleTestNotification))
+	mux.HandleFunc("POST /api/v1/actions/preview", s.secureWrite(s.handleActionPreview))
+	mux.HandleFunc("POST /api/v1/actions/poweroff", s.secureWrite(s.handleActionPowerOff))
+	mux.HandleFunc("POST /api/v1/actions/docker-drain", s.secureWrite(s.handleActionDockerDrain))
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)

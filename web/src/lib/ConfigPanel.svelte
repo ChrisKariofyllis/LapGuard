@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchConfig, putConfig, testNotification } from './api';
-  import type { AppConfig, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
+  import { fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
+  import type { ActionsConfig, AppConfig, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
 
   let loading = $state(true);
   let saving = $state(false);
@@ -13,8 +13,15 @@
   let showWebhook = $state(false);
   let notes = $state<string[]>([]);
   let execution = $state('unconfigured');
+  let hostExecution = $state('disabled');
   let webhookConfigured = $state(false);
   let chatConfigured = $state(false);
+  let powerSource = $state<'AC' | 'BATTERY' | 'UNKNOWN'>('UNKNOWN');
+  let acting = $state(false);
+  let modal = $state<null | 'poweroff' | 'docker'>(null);
+  let confirmText = $state('');
+  let actionNotice = $state<string | null>(null);
+  let actionFailed = $state(false);
 
   let notifications = $state<NotificationsConfig>({
     provider: 'none',
@@ -31,6 +38,15 @@
   let docker = $state<DockerConfig>({
     stop_enabled: false,
     timeout_seconds: 30,
+  });
+  let actions = $state<ActionsConfig>({
+    real_enabled: false,
+    require_confirmation: true,
+    cooldown_seconds: 60,
+    poweroff_timeout_seconds: 30,
+    intended_plan: ['sync', 'poweroff'],
+    gates: ['real_actions_disabled', 'safety_dry_run'],
+    ready: false,
   });
 
   const thresholdHint = $derived.by(() => {
@@ -50,6 +66,57 @@
     notifications.enabled && notifications.provider !== 'none' && (webhookConfigured || Boolean(notifications.webhook_url)),
   );
 
+  const intendedPlan = $derived.by(() => {
+    const plan: string[] = [];
+    if (docker.stop_enabled) {
+      plan.push('stop_docker');
+    }
+    plan.push('sync', 'poweroff');
+    return plan;
+  });
+  const poweroffReady = $derived(actions.ready && powerSource === 'BATTERY');
+  const dockerReady = $derived(actions.ready);
+  const confirmWord = $derived(modal === 'docker' ? 'STOP_DOCKER' : 'POWER_OFF');
+
+  function planLabel(step: string): string {
+    switch (step) {
+      case 'stop_docker':
+        return 'Stop Docker containers';
+      case 'sync':
+        return 'Flush filesystem buffers';
+      case 'poweroff':
+        return 'Power off the host';
+      default:
+        return step.replaceAll('_', ' ');
+    }
+  }
+
+  function gateLabel(gate: string): string {
+    switch (gate) {
+      case 'real_actions_disabled':
+        return 'Real actions disabled';
+      case 'safety_dry_run':
+        return 'Safety dry-run is on';
+      case 'confirmation_required':
+        return 'Confirmation required';
+      default:
+        return gate.replaceAll('_', ' ');
+    }
+  }
+
+  function hostBadge(): string {
+    if (!actions.real_enabled) {
+      return 'Real actions disabled';
+    }
+    if (hostExecution === 'dry_run') {
+      return 'Dry-run';
+    }
+    if (actions.ready) {
+      return 'Manual only';
+    }
+    return hostExecution;
+  }
+
   function applyView(cfg: AppConfig) {
     webhookConfigured = Boolean(cfg.notifications.webhook_configured);
     chatConfigured = Boolean(cfg.notifications.chat_id_configured);
@@ -62,14 +129,20 @@
     };
     shutdown = { ...cfg.shutdown };
     docker = { ...cfg.docker };
+    if (cfg.actions) {
+      actions = { ...cfg.actions };
+    }
     notes = cfg.notes ?? [];
     execution = cfg.execution?.notifications ?? 'unconfigured';
+    hostExecution = cfg.execution?.shutdown ?? 'disabled';
   }
 
   async function load() {
     loading = true;
     try {
-      applyView(await fetchConfig());
+      const [cfg, power] = await Promise.all([fetchConfig(), fetchPower()]);
+      applyView(cfg);
+      powerSource = power.source;
       error = null;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unable to load configuration';
@@ -119,10 +192,62 @@
     }
   }
 
+  function openModal(kind: 'poweroff' | 'docker') {
+    if (kind === 'poweroff' && !poweroffReady) {
+      return;
+    }
+    if (kind === 'docker' && !dockerReady) {
+      return;
+    }
+    modal = kind;
+    confirmText = '';
+    actionNotice = null;
+    actionFailed = false;
+  }
+
+  function closeModal() {
+    modal = null;
+    confirmText = '';
+  }
+
+  async function confirmAction() {
+    if (!modal || confirmText !== confirmWord || acting) {
+      return;
+    }
+    acting = true;
+    actionNotice = null;
+    try {
+      const result = modal === 'docker' ? await postDockerDrain() : await postPowerOff();
+      actionFailed = !result.ok;
+      actionNotice = result.ok
+        ? 'Action accepted. Command output is not shown.'
+        : result.error || result.detail || 'Action rejected';
+      if (result.ok) {
+        closeModal();
+      }
+    } catch (err) {
+      actionFailed = true;
+      actionNotice = err instanceof Error ? err.message : 'Action failed';
+    } finally {
+      acting = false;
+    }
+  }
+
   onMount(() => {
     void load();
+    const id = window.setInterval(() => {
+      void fetchPower()
+        .then((power) => {
+          powerSource = power.source;
+        })
+        .catch(() => {
+          /* keep last known source */
+        });
+    }, 5000);
+    return () => window.clearInterval(id);
   });
 </script>
+
 
 <section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
   <div class="flex flex-wrap items-start justify-between gap-2">
@@ -243,16 +368,17 @@
     <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Low-battery shutdown</h3>
-        <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">Stored only</span>
+        <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">{hostBadge()}</span>
       </div>
       <p class="mt-1 text-xs text-mist">
-        Thresholds are validated and persisted. LapGuard will not power off the machine yet. Warning and critical percents are also used for battery notifications.
+        Thresholds are validated and persisted. Automatic low-battery shutdown is not executed in this alpha.
+        Manual poweroff is experimental, disabled by default, and requires extra gates.
       </p>
 
       <div class="mt-3 grid gap-3 sm:grid-cols-3">
         <label class="flex items-center gap-2 text-sm text-snow sm:col-span-3">
           <input type="checkbox" bind:checked={shutdown.enabled} />
-          Enable shutdown thresholds (not executed in this alpha)
+          Enable shutdown thresholds (automatic path still does not execute)
         </label>
         <label class="block text-xs text-mist">
           Warning %
@@ -278,11 +404,26 @@
       {#if thresholdHint}
         <p class="mt-2 text-xs text-rose">{thresholdHint}</p>
       {/if}
+
+      <div class="mt-3 rounded-xl border border-line bg-panel/60 px-3 py-2">
+        <p class="text-[11px] uppercase tracking-wide text-mist">Intended plan</p>
+        <ul class="mt-1 space-y-0.5 text-xs text-snow">
+          {#each intendedPlan as step}
+            <li>{planLabel(step)}</li>
+          {/each}
+        </ul>
+        {#if actions.gates.length}
+          <p class="mt-2 text-[11px] text-amber">{actions.gates.map(gateLabel).join(' · ')}</p>
+        {/if}
+        <p class="mt-1 text-[11px] text-mist">Power source: {powerSource}</p>
+      </div>
+
       <button
         type="button"
-        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist opacity-50"
-        disabled
-        title="Host shutdown is not implemented yet"
+        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        disabled={!poweroffReady || acting}
+        title={poweroffReady ? 'Requires confirmation' : 'Real actions stay disabled until every safety gate is satisfied and AC is disconnected'}
+        onclick={() => openModal('poweroff')}
       >
         Shut down now
       </button>
@@ -291,16 +432,16 @@
     <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Docker drain</h3>
-        <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">Stored only</span>
+        <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">{hostBadge()}</span>
       </div>
       <p class="mt-1 text-xs text-mist">
-        Stop-before-shutdown is stored here. Containers are not stopped in this milestone.
+        Stop-before-shutdown is stored here. Manual drain is experimental and disabled by default.
       </p>
 
       <div class="mt-3 grid gap-3 sm:grid-cols-2">
         <label class="flex items-center gap-2 text-sm text-snow">
           <input type="checkbox" bind:checked={docker.stop_enabled} />
-          Stop containers before shutdown (stored only; not executed)
+          Include Docker stop in the shutdown plan
         </label>
         <label class="block text-xs text-mist">
           Timeout (seconds)
@@ -315,12 +456,60 @@
       </div>
       <button
         type="button"
-        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist opacity-50"
-        disabled
-        title="Docker control is not implemented yet"
+        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        disabled={!dockerReady || acting}
+        title={dockerReady ? 'Requires confirmation' : 'Real actions stay disabled until every safety gate is satisfied'}
+        onclick={() => openModal('docker')}
       >
         Stop Docker containers
       </button>
     </div>
   </div>
 </section>
+
+{#if modal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+    <div class="w-full max-w-md rounded-2xl border border-line bg-panel px-4 py-4">
+      <h3 class="text-sm font-medium">
+        {modal === 'docker' ? 'Confirm Docker drain' : 'Confirm host poweroff'}
+      </h3>
+      <p class="mt-2 text-xs text-mist">
+        {modal === 'docker'
+          ? 'This will stop running containers. Type STOP_DOCKER to continue.'
+          : 'This will power off the machine. Type POWER_OFF to continue.'}
+      </p>
+      <input
+        class="mt-3 w-full rounded-xl border border-line bg-ink-soft px-3 py-2 font-mono text-sm text-snow"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+        bind:value={confirmText}
+      />
+      {#if actionNotice && actionFailed}
+        <p class="mt-2 text-xs text-rose">{actionNotice}</p>
+      {/if}
+      <div class="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          class="rounded-full border border-line px-3 py-1 text-xs text-mist"
+          onclick={closeModal}
+          disabled={acting}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="rounded-full border border-rose/50 px-3 py-1 text-xs text-rose disabled:opacity-50"
+          disabled={acting || confirmText !== confirmWord}
+          onclick={() => void confirmAction()}
+        >
+          {acting ? 'Working…' : 'Confirm'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if actionNotice && !modal}
+  <p class="mt-3 text-xs {actionFailed ? 'text-rose' : 'text-mint'}">{actionNotice}</p>
+{/if}

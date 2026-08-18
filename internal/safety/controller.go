@@ -186,8 +186,8 @@ func (c *Controller) snapshotLocked(cfg config.Config) Snapshot {
 	}
 	return Snapshot{
 		State:                 c.state,
-		DryRun:                true, // this milestone is always dry-run in the API banner
-		Message:               DryRunMessage,
+		DryRun:                cfg.Safety.DryRun,
+		Message:               automaticMessage(cfg),
 		Running:               c.running,
 		BatteryPercent:        c.lastSample.Percent,
 		BatteryStatus:         c.lastSample.Status,
@@ -239,8 +239,8 @@ func (c *Controller) Tick(ctx context.Context, sample Sample) Snapshot {
 	}
 
 	if len(plan) > 0 {
-		c.log.Info("safety intended action", "event", EventBatteryCritical, "actions", plan, "dry_run", true)
-		// dry-run: never invoke the executor
+		c.log.Info("safety intended action", "event", EventBatteryCritical, "actions", plan, "dry_run", cfg.Safety.DryRun)
+		// Automatic low-battery shutdown is not executed in this alpha.
 	}
 
 	return snap
@@ -333,6 +333,13 @@ func (c *Controller) actionCooldownElapsed(now time.Time, seconds int, force boo
 		return true
 	}
 	return !now.Before(c.lastActionAt.Add(time.Duration(seconds) * time.Second))
+}
+
+func automaticMessage(cfg config.Config) string {
+	if cfg.Safety.DryRun {
+		return DryRunMessage
+	}
+	return "Automatic low-battery shutdown is not executed in this alpha"
 }
 
 func intendedPlan(docker config.DockerConfig) []string {

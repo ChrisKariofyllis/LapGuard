@@ -66,13 +66,15 @@
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
       <h2 class="text-sm font-medium">Safety controller</h2>
-      <p class="mt-1 text-xs text-mist">Monitors battery percent while discharging. Host commands are not executed.</p>
+      <p class="mt-1 text-xs text-mist">Monitors battery percent while discharging. Automatic host commands are not executed.</p>
     </div>
-    <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">Dry-run</span>
+    <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">
+      {safety?.dry_run === false ? 'Automatic dry-run' : 'Dry-run'}
+    </span>
   </div>
 
   <p class="mt-3 rounded-xl border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber">
-    Dry run — no commands will be executed
+    Automatic shutdown is not executed in this alpha. Real actions stay disabled unless explicitly enabled.
   </p>
 
   {#if error}

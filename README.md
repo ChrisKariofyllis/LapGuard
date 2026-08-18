@@ -18,18 +18,28 @@ Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
 - Charge-threshold **writes are not wired** (helpers exist, daemon never calls them).
 - CI and tests do **not** require a battery, Docker, root, or TLP.
 
-### Safety controller is dry-run only
+### Real actions are experimental and disabled by default
+
+**Do not enable real actions on an important machine.** This alpha remains
+dry-run unless you explicitly change both `actions.real_enabled` and
+`safety.dry_run`.
 
 The battery safety controller classifies `NORMAL` / `WARNING` / `CRITICAL` /
-`SHUTDOWN_PENDING` and can record an *intended* action plan. **It does not
-execute that plan.**
+`SHUTDOWN_PENDING` and can record an *intended* action plan. **Automatic
+low-battery shutdown is not executed.**
 
-LapGuard will **not** stop Docker containers, sync the filesystem, or power
-off the host. It will not run `docker stop`, `systemctl poweroff`, `shutdown`,
-`reboot`, or `sync`. `safety.dry_run` is forced on. Real shutdown and Docker
-execution are out of scope for this alpha.
+Defaults:
 
-> **Warning:** The safety controller is currently simulation/dry-run only. It will not stop containers, sync the filesystem, or power off the host.
+- `actions.real_enabled=false`
+- `safety.dry_run=true`
+- `safety.require_ac_loss=true`
+
+Manual `POST /api/v1/actions/poweroff` and `POST /api/v1/actions/docker-drain`
+exist behind those gates, authentication, explicit confirmation, AC checks
+(for poweroff), audit events, and a cooldown. Tests never run host commands.
+This milestone does **not** add sudoers, polkit, or unrestricted root.
+
+> **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
 
 ## Current features
 
@@ -44,6 +54,7 @@ execution are out of scope for this alpha.
 - AC power-loss watcher with debounce and a local SQLite outage log
 - Optional notifications (ntfy, Telegram, Discord) — **off by default**
 - Battery safety state machine with simulate-warning / simulate-critical
+- Experimental manual Docker drain and host poweroff, **disabled by default**
 - Svelte dashboard for telemetry, capabilities, power events, config, and safety
 - Optional Bearer API token (`lapguard auth generate`) protecting POST/PUT routes
 - Loopback bind; remote access is meant to go through Tailscale Serve or SSH, not a public listen address
@@ -254,8 +265,10 @@ the old token). Then generate a new one.
   compatibility report.
 - The process should not run as root for alpha. The systemd templates do
   not grant sudo or `CAP_SYS_BOOT`.
-- Dry-run safety means a low battery will **not** stop workloads or power
-  off the machine. Real shutdown and Docker execution are not implemented.
+- Dry-run safety means a low battery will **not** automatically stop
+  workloads or power off the machine. Real actions stay disabled until you
+  set `actions.real_enabled=true` and `safety.dry_run=false`. Do not do that
+  on an important machine.
 
 ## Compatibility reports
 
@@ -352,13 +365,14 @@ state must stay stable for 10 seconds (default) before
 **Safety states.** Warning/critical use the configured shutdown percents and
 fire only while **Discharging**. On critical, the process records an intended
 plan (`stop_docker` if configured, `sync`, `poweroff`) and **logs it**.
-`POST /api/v1/safety/test` with `{"scenario":"warning"}` or `"critical"`
-simulates a transition without sysfs and without commands.
+Automatic execution of that plan is not implemented. `POST /api/v1/safety/test`
+with `{"scenario":"warning"}` or `"critical"` simulates a transition without
+sysfs and without commands.
 
 **Config.** `GET`/`PUT /api/v1/config` persist notifications, shutdown
-percents, Docker *intent*, and safety flags to the JSON file. Critical
-percent must be lower than warning. `safety.dry_run` cannot be turned off
-in this alpha.
+percents, Docker *intent*, safety flags, and experimental action gates.
+Critical percent must be lower than warning. Defaults keep
+`safety.dry_run=true` and `actions.real_enabled=false`.
 
 **Discovery.** Features are enabled only when the matching sysfs files,
 modules, or tools exist. Missing hardware is `none` plus `why_not`. See
@@ -380,6 +394,9 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | GET | `/api/v1/power` | `AC` / `BATTERY` / `UNKNOWN`, adapters, watcher |
 | GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
 | POST | `/api/v1/actions/test-notification` | Test message (enabled provider required) |
+| POST | `/api/v1/actions/preview` | Intended plan only (`commands_executed=false`) |
+| POST | `/api/v1/actions/poweroff` | Manual poweroff (disabled by default; confirm `POWER_OFF`) |
+| POST | `/api/v1/actions/docker-drain` | Manual Docker drain (disabled by default; confirm `STOP_DOCKER`) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
 | POST | `/api/v1/safety/test` | Simulate warning or critical (dry-run) |
 | GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version`, `auth_enabled` |
@@ -389,9 +406,10 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 
 `GET /api/v1/config` omits secret values and sets `webhook_configured` /
 `chat_id_configured`, `auth_enabled`, and `token_configured`. It never returns
-`token_hash` or the plaintext token. `execution.shutdown` and `execution.docker`
-stay `stored_only` in this alpha. When `auth.enabled` is true, POST/PUT need
-`Authorization: Bearer`. GET routes listed above stay readable.
+`token_hash`, the plaintext token, or host command strings.
+`execution.shutdown` and `execution.docker` are `disabled` by default.
+When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`. GET routes
+listed above stay readable.
 
 ## Layout
 
@@ -405,7 +423,8 @@ internal/power/              # mains scan, debounce watcher
 internal/storage/            # SQLite outage + bounded audit log
 internal/thresholds/         # unused write helpers (sysfs / tlp setcharge); not called
 internal/notify/             # ntfy / Telegram / Discord delivery, retries, dry-run
-internal/safety/             # battery safety state machine (recording executor only)
+internal/safety/             # battery safety state machine (recording executor)
+internal/actions/            # gated real executor (disabled by default; refused in tests)
 internal/webui/              # optional embed of web/dist (-tags embedui)
 internal/api/
 internal/config/             # flags + atomic config.json (mode 0600)

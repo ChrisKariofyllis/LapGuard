@@ -1,12 +1,17 @@
 # Native Linux installation (alpha)
 
 LapGuard is a local daemon. There is no `curl | sudo bash` installer and no
-sudoers file. The battery safety controller is **dry-run only**: even after
-install, LapGuard will not stop Docker containers or shut down the host.
-Charge-threshold writes are **not** performed.
+sudoers file.
 
-Prefer the **user systemd unit** for alpha. The system unit is for machines
-that should run LapGuard without a login session.
+> **Warning:** Real actions (Docker drain and host poweroff) are experimental
+> and **disabled by default**. Do not enable them on an important machine.
+> This alpha remains dry-run unless you explicitly set
+> `actions.real_enabled=true` and `safety.dry_run=false`. Automatic
+> low-battery shutdown is still not executed.
+
+Charge-threshold writes are **not** performed. Prefer the **user systemd unit**
+for alpha. The system unit is for machines that should run LapGuard without a
+login session.
 
 ## Paths
 
@@ -292,14 +297,18 @@ HTTP requires a valid Bearer token when auth is on, or a loopback request to
 `127.0.0.1` when auth is off. Remote callers cannot enable or disable auth
 without a token.
 
-Real shutdown and Docker execution are not implemented.
+Real Docker drain and host poweroff are experimental, disabled by default, and
+must not be enabled on an important machine. Automatic low-battery shutdown is
+not executed. This alpha does not install sudoers or polkit rules.
 
 ## What this alpha will not do
 
-- Execute `docker stop` / `docker kill`
-- Execute `systemctl poweroff`, `shutdown`, `reboot`, or `sync`
+- Automatically stop Docker or power off the host on low battery
+- Execute real actions unless `actions.real_enabled=true` **and**
+  `safety.dry_run=false` **and** the caller sends explicit confirmation
 - Write charge start/stop thresholds to sysfs or via `tlp setcharge`
 - Install via a remote shell pipe
 - Bind the HTTP server to `0.0.0.0`, a Tailscale `100.x` address, or a public interface
 - Run `sudo`, Funnel, or `tailscale serve --bg` on your behalf (`lapguard tailscale check` is read-only)
 - Expose the API on a public address
+- Add sudoers, polkit, or unrestricted root permissions

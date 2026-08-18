@@ -1,8 +1,9 @@
 # Contributing to LapGuard
 
-LapGuard is an open-source **alpha**. The battery safety controller is dry-run
-only: do not implement real Docker stop or host shutdown unless a maintainer
-explicitly asks for that work.
+LapGuard is an open-source **alpha**. Automatic low-battery shutdown is not
+executed. Real Docker drain and host poweroff are experimental, disabled by
+default, and must not be enabled on an important machine. Do not add sudoers
+or polkit rules unless a maintainer explicitly asks for that work.
 
 ## Development setup
 

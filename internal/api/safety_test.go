@@ -79,7 +79,7 @@ func TestGetConfigIncludesSafetyDefaults(t *testing.T) {
 	}
 }
 
-func TestPutConfigCannotDisableSafetyDryRun(t *testing.T) {
+func TestPutConfigDryRunOffDoesNotEnableRealActions(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	req := jsonRequest(http.MethodPut, "/api/v1/config", `{"safety":{"dry_run":false}}`)
 	rec := httptest.NewRecorder()
@@ -91,15 +91,14 @@ func TestPutConfigCannotDisableSafetyDryRun(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if !body.Safety.DryRun {
-		t.Fatal("safety.dry_run must stay forced on")
+	if body.Safety.DryRun {
+		t.Fatal("explicit dry_run=false should persist")
 	}
-	loaded, err := config.LoadFile(srv.currentConfig().ConfigPath)
-	if err != nil {
-		t.Fatal(err)
+	if body.Actions.RealEnabled || body.Actions.Ready {
+		t.Fatal("real actions must stay disabled")
 	}
-	if !loaded.Safety.DryRun {
-		t.Fatal("persisted safety.dry_run must stay true")
+	if body.Execution.Shutdown != config.ExecutionDisabled {
+		t.Fatalf("execution %+v", body.Execution)
 	}
 }
 

@@ -250,6 +250,9 @@ func TestLoadFileKeepsSettingsDefaults(t *testing.T) {
 	if cfg.Docker.TimeoutSeconds != 30 {
 		t.Fatalf("docker %+v", cfg.Docker)
 	}
+	if cfg.Actions.RealEnabled || !cfg.Actions.RequireConfirmation {
+		t.Fatalf("actions %+v", cfg.Actions)
+	}
 }
 
 func TestShutdownThresholdValidation(t *testing.T) {
@@ -378,15 +381,18 @@ func TestAtomicWriteFileMode(t *testing.T) {
 	}
 }
 
-func TestSafetyDryRunCannotBeTurnedOff(t *testing.T) {
+func TestSafetyDryRunDefaultsOnAndCanBeTurnedOff(t *testing.T) {
 	s := DefaultSafety()
+	if !s.DryRun {
+		t.Fatal("dry_run must default true")
+	}
 	off := false
 	out, err := s.Apply(SafetyPatch{DryRun: &off})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !out.DryRun {
-		t.Fatal("normalize must force safety.dry_run on")
+	if out.DryRun {
+		t.Fatal("explicit dry_run=false should apply; automatic execution stays disabled")
 	}
 }
 

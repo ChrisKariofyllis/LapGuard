@@ -136,11 +136,22 @@ export type DockerConfig = {
   timeout_seconds: number;
 };
 
+export type ActionsConfig = {
+  real_enabled: boolean;
+  require_confirmation: boolean;
+  cooldown_seconds: number;
+  poweroff_timeout_seconds: number;
+  intended_plan: string[];
+  gates: string[];
+  ready: boolean;
+};
+
 export type AppConfig = {
   notifications: NotificationsConfig;
   shutdown: ShutdownConfig;
   docker: DockerConfig;
   safety?: SafetyConfig;
+  actions?: ActionsConfig;
   auth_enabled?: boolean;
   token_configured?: boolean;
   token_created_at?: string;
@@ -195,6 +206,17 @@ export type SafetyTestResult = {
   message?: string;
   error?: string;
   safety?: SafetyStatus;
+};
+
+export type ActionResult = {
+  ok: boolean;
+  dry_run?: boolean;
+  real_enabled?: boolean;
+  commands_executed?: boolean;
+  plan?: string[];
+  gates?: string[];
+  error?: string;
+  detail?: string;
 };
 
 export type PowerAdapter = {

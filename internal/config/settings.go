@@ -47,22 +47,23 @@ type NotificationsView struct {
 	ChatIDConfigured  bool   `json:"chat_id_configured"`
 }
 
-// ShutdownConfig is persisted only. Host shutdown is not executed in this milestone.
+// ShutdownConfig is persisted only. Automatic host shutdown is not executed in this alpha.
 type ShutdownConfig struct {
 	Enabled           bool `json:"enabled"`
 	WarningThreshold  int  `json:"warning_threshold"`
 	CriticalThreshold int  `json:"critical_threshold"`
 }
 
-// DockerConfig is persisted only. Containers are not stopped in this milestone.
+// DockerConfig is persisted only. Automatic container stop is not executed.
+// Manual drain requires actions.real_enabled and safety.dry_run=false.
 type DockerConfig struct {
 	StopEnabled    bool `json:"stop_enabled"`
 	TimeoutSeconds int  `json:"timeout_seconds"`
 }
 
 // SafetyConfig gates the battery safety controller. dry_run and require_ac_loss
-// default to true. This milestone never executes host commands even if dry_run
-// is later set to false in the file.
+// default to true. Automatic low-battery shutdown is never executed in this
+// alpha even if dry_run is later set to false.
 type SafetyConfig struct {
 	DryRun                bool `json:"dry_run"`
 	RequireACLoss         bool `json:"require_ac_loss"`
@@ -86,6 +87,7 @@ type APIConfig struct {
 	TokenConfigured bool              `json:"token_configured"`
 	TokenCreatedAt  string            `json:"token_created_at,omitempty"`
 	LastRotatedAt   string            `json:"last_rotated_at,omitempty"`
+	Actions         ActionsView       `json:"actions"`
 	Execution       ExecutionStatus   `json:"execution"`
 	Notes           []string          `json:"notes,omitempty"`
 }
@@ -124,6 +126,7 @@ func StoredOnlyExecution() ExecutionStatus {
 
 func (c Config) APIView() APIConfig {
 	view := c.Auth.View()
+	hostExec := c.hostExecutionState()
 	return APIConfig{
 		Notifications:   c.Notifications.Public(),
 		Shutdown:        c.Shutdown,
@@ -133,13 +136,16 @@ func (c Config) APIView() APIConfig {
 		TokenConfigured: view.TokenConfigured,
 		TokenCreatedAt:  view.TokenCreatedAt,
 		LastRotatedAt:   view.LastRotatedAt,
+		Actions:         c.Actions.View(c.IntendedPlan(), c.ActionGates(), c.ManualActionsReady()),
 		Execution: ExecutionStatus{
 			Notifications: c.Notifications.ExecutionState(),
-			Shutdown:      ExecutionStoredOnly,
-			Docker:        ExecutionStoredOnly,
+			Shutdown:      hostExec,
+			Docker:        hostExec,
 		},
 		Notes: []string{
-			"Notification delivery runs only when a provider is configured and enabled. The battery safety controller is dry-run only: Docker stop and host shutdown are never executed.",
+			"Notification delivery runs only when a provider is configured and enabled.",
+			"Automatic low-battery shutdown is not executed in this alpha. The safety controller remains a recorder.",
+			"Manual Docker drain and poweroff are experimental, disabled by default, and require actions.real_enabled=true, safety.dry_run=false, and explicit confirmation. Do not enable them on an important machine.",
 			"GET telemetry, capabilities, discover, power, events, safety, healthz, and auth/status stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
 		},
 	}
@@ -246,7 +252,6 @@ func (d *DockerConfig) normalize() error {
 }
 
 func (s *SafetyConfig) normalize() error {
-	s.DryRun = true
 	if err := validatePercent("minimum_battery_percent", s.MinimumBatteryPercent); err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-import type { AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
+import type { ActionResult, AppConfig, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
 import { authHeaders } from './auth';
 
 async function readError(path: string, res: Response): Promise<string> {
@@ -163,4 +163,42 @@ export async function testSafety(scenario: 'warning' | 'critical'): Promise<Safe
     };
   }
   return body;
+}
+
+export function previewActions(): Promise<ActionResult> {
+  return sendJSON<ActionResult>('POST', '/api/v1/actions/preview', {});
+}
+
+export async function postPowerOff(): Promise<ActionResult> {
+  return postManualAction('/api/v1/actions/poweroff', { confirm: 'POWER_OFF' });
+}
+
+export async function postDockerDrain(): Promise<ActionResult> {
+  return postManualAction('/api/v1/actions/docker-drain', { confirm: 'STOP_DOCKER' });
+}
+
+async function postManualAction(path: string, body: unknown): Promise<ActionResult> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+    },
+    body: JSON.stringify(body),
+  });
+  const parsed = (await res.json().catch(() => ({}))) as ActionResult;
+  if (!res.ok) {
+    return {
+      ok: false,
+      dry_run: parsed.dry_run,
+      real_enabled: parsed.real_enabled,
+      commands_executed: false,
+      plan: parsed.plan,
+      gates: parsed.gates,
+      error: parsed.error || parsed.detail || `${path} failed: ${res.status}`,
+      detail: parsed.detail,
+    };
+  }
+  return parsed;
 }

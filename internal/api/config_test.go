@@ -37,11 +37,17 @@ func TestGetConfig(t *testing.T) {
 	if body.Docker.TimeoutSeconds != 30 {
 		t.Fatalf("docker %+v", body.Docker)
 	}
-	if body.Execution.Shutdown != config.ExecutionStoredOnly {
+	if body.Execution.Shutdown != config.ExecutionDisabled {
 		t.Fatalf("execution %+v", body.Execution)
 	}
-	if body.Execution.Docker != config.ExecutionStoredOnly {
+	if body.Execution.Docker != config.ExecutionDisabled {
 		t.Fatalf("docker execution %+v", body.Execution)
+	}
+	if body.Actions.RealEnabled || body.Actions.Ready {
+		t.Fatalf("actions %+v", body.Actions)
+	}
+	if !body.Actions.RequireConfirmation {
+		t.Fatal("confirmation must be required")
 	}
 	if body.Execution.Notifications != config.ExecutionUnconfigured {
 		t.Fatalf("notifications execution %+v", body.Execution)
@@ -71,11 +77,11 @@ func TestPutConfig(t *testing.T) {
 	if !body.Docker.StopEnabled || body.Docker.TimeoutSeconds != 45 {
 		t.Fatalf("docker %+v", body.Docker)
 	}
-	if body.Execution.Shutdown != config.ExecutionStoredOnly {
-		t.Fatal("PUT must not claim shutdown is implemented")
+	if body.Execution.Shutdown != config.ExecutionDisabled {
+		t.Fatal("PUT must not enable real host actions by default")
 	}
-	if body.Execution.Docker != config.ExecutionStoredOnly {
-		t.Fatal("PUT must not claim Docker stop is implemented")
+	if body.Execution.Docker != config.ExecutionDisabled {
+		t.Fatal("PUT must not enable Docker drain by default")
 	}
 	if body.Execution.Notifications != config.ExecutionDisabled {
 		t.Fatalf("configured but disabled notifications: %+v", body.Execution)
@@ -163,7 +169,7 @@ func TestPostNotificationsAndShutdown(t *testing.T) {
 	if body.Notifications.WebhookURL != "" {
 		t.Fatalf("discord webhook leaked in API: %+v", body.Notifications)
 	}
-	if body.Execution.Shutdown != config.ExecutionStoredOnly {
+	if body.Execution.Shutdown != config.ExecutionDisabled {
 		t.Fatal("POST shutdown must not execute")
 	}
 	if body.Execution.Notifications != config.ExecutionReady {

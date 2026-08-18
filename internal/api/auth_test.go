@@ -68,6 +68,9 @@ func TestProtectedPOSTAndPUT(t *testing.T) {
 		{http.MethodPost, "/api/v1/config/notifications", `{"provider":"none"}`},
 		{http.MethodPost, "/api/v1/config/shutdown", `{"enabled":false,"warning_threshold":20,"critical_threshold":10}`},
 		{http.MethodPost, "/api/v1/actions/test-notification", `{}`},
+		{http.MethodPost, "/api/v1/actions/preview", `{}`},
+		{http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`},
+		{http.MethodPost, "/api/v1/actions/docker-drain", `{"confirm":"STOP_DOCKER"}`},
 		{http.MethodPost, "/api/v1/safety/test", `{"scenario":"warning"}`},
 	}
 	for _, tc := range paths {

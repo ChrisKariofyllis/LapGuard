@@ -36,6 +36,10 @@ const (
 	AuditAuthRotate       = "auth_rotate"
 	AuditUnauthorized     = "unauthorized"
 	AuditInvalidOrigin    = "invalid_origin"
+	AuditPowerOffAttempt  = "poweroff_attempt"
+	AuditPowerOffResult   = "poweroff_result"
+	AuditDockerAttempt    = "docker_drain_attempt"
+	AuditDockerResult     = "docker_drain_result"
 )
 
 // AuditEvent is a redacted security log row. It never stores tokens, headers,
