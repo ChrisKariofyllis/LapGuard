@@ -53,21 +53,39 @@ type actionResponse struct {
 }
 
 type actionStatusResponse struct {
-	RealEnabled       bool           `json:"real_enabled"`
-	SafetyDryRun      bool           `json:"safety_dry_run"`
-	RequireACLoss     bool           `json:"require_ac_loss"`
-	ACState           string         `json:"ac_state"`
-	BatteryStatus     string         `json:"battery_status"`
-	BatteryPercent    *int           `json:"battery_percent"`
-	Discharging       bool           `json:"discharging"`
-	Cooldown          cooldownStatus `json:"cooldown"`
-	Executor          string         `json:"executor"`
-	CommandsExecuted  bool           `json:"commands_executed"`
-	Ready             bool           `json:"ready"`
-	Gates             []string       `json:"gates"`
-	Warnings          []string       `json:"warnings"`
-	AutomaticShutdown bool           `json:"automatic_shutdown_executed"`
-	Plan              []string       `json:"plan"`
+	RealEnabled       bool                     `json:"real_enabled"`
+	SafetyDryRun      bool                     `json:"safety_dry_run"`
+	RequireACLoss     bool                     `json:"require_ac_loss"`
+	ACState           string                   `json:"ac_state"`
+	BatteryStatus     string                   `json:"battery_status"`
+	BatteryPercent    *int                     `json:"battery_percent"`
+	Discharging       bool                     `json:"discharging"`
+	Cooldown          cooldownStatus           `json:"cooldown"`
+	Executor          string                   `json:"executor"`
+	CommandsExecuted  bool                     `json:"commands_executed"`
+	Ready             bool                     `json:"ready"`
+	Gates             []string                 `json:"gates"`
+	Warnings          []string                 `json:"warnings"`
+	AutomaticShutdown bool                     `json:"automatic_shutdown_executed"`
+	Plan              []string                 `json:"plan"`
+	Config            config.ConfigRuntimeView `json:"config"`
+	RestartRequired   string                   `json:"restart_required_for_disk_edits,omitempty"`
+}
+
+type actionPreflightResponse struct {
+	RealEnabled       bool                     `json:"real_enabled"`
+	SafetyDryRun      bool                     `json:"safety_dry_run"`
+	Executor          string                   `json:"executor"`
+	ACState           string                   `json:"ac_state"`
+	BatteryStatus     string                   `json:"battery_status"`
+	BatteryPercent    *int                     `json:"battery_percent"`
+	Discharging       bool                     `json:"discharging"`
+	Ready             bool                     `json:"ready"`
+	Gates             []string                 `json:"gates"`
+	CommandsExecuted  bool                     `json:"commands_executed"`
+	AutomaticShutdown bool                     `json:"automatic_shutdown_executed"`
+	Config            config.ConfigRuntimeView `json:"config"`
+	Explanation       string                   `json:"explanation"`
 }
 
 type cooldownStatus struct {
@@ -135,13 +153,36 @@ func (g *actionGuard) snapshot(now time.Time, cooldown time.Duration) cooldownSt
 }
 
 func (s *Server) handleActionStatus(w http.ResponseWriter, _ *http.Request) {
+	s.writeJSON(w, http.StatusOK, s.actionStatus())
+}
+
+func (s *Server) handleActionPreflight(w http.ResponseWriter, _ *http.Request) {
+	st := s.actionStatus()
+	s.writeJSON(w, http.StatusOK, actionPreflightResponse{
+		RealEnabled:       st.RealEnabled,
+		SafetyDryRun:      st.SafetyDryRun,
+		Executor:          st.Executor,
+		ACState:           st.ACState,
+		BatteryStatus:     st.BatteryStatus,
+		BatteryPercent:    st.BatteryPercent,
+		Discharging:       st.Discharging,
+		Ready:             st.Ready,
+		Gates:             st.Gates,
+		CommandsExecuted:  false,
+		AutomaticShutdown: false,
+		Config:            st.Config,
+		Explanation:       config.DiskEditRestartMessage,
+	})
+}
+
+func (s *Server) actionStatus() actionStatusResponse {
 	cfg := s.currentConfig()
 	src := s.currentPowerSource()
 	bat := s.currentBattery()
 	now := s.nowUTC()
 	cool := s.guard.snapshot(now, time.Duration(cfg.Actions.CooldownSeconds)*time.Second)
 	gates := liveActionGates(cfg, src, bat, cool)
-	s.writeJSON(w, http.StatusOK, actionStatusResponse{
+	return actionStatusResponse{
 		RealEnabled:       cfg.Actions.RealEnabled,
 		SafetyDryRun:      cfg.Safety.DryRun,
 		RequireACLoss:     cfg.Safety.RequireACLoss,
@@ -157,7 +198,9 @@ func (s *Server) handleActionStatus(w http.ResponseWriter, _ *http.Request) {
 		Warnings:          actionWarnings(cfg, gates),
 		AutomaticShutdown: false,
 		Plan:              cfg.IntendedPlan(),
-	})
+		Config:            cfg.RuntimeView(),
+		RestartRequired:   config.ConfigReloadRestartRequired,
+	}
 }
 
 func (s *Server) handleActionPreview(w http.ResponseWriter, _ *http.Request) {
@@ -308,6 +351,7 @@ func actionWarnings(cfg config.Config, gates []string) []string {
 		"Real actions are experimental and are not safe for production yet.",
 		"Automatic low-battery shutdown is not implemented.",
 		"Do not enable real actions on an important machine.",
+		config.DiskEditRestartMessage,
 	}
 	for _, g := range gates {
 		switch g {

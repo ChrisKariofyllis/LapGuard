@@ -12,7 +12,9 @@ sudoers file.
 > Even then, a request must pass authentication (when enabled), exact
 > confirmation (`POWER_OFF` / `STOP_DOCKER`), known AC-disconnected state, a
 > discharging battery, cooldown, and an in-progress lock.
-> `GET /api/v1/actions/status` reports those gates without running commands.
+> `GET /api/v1/actions/status` and `GET /api/v1/actions/preflight` report those
+> gates without running commands. Editing `config.json` on disk requires a
+> restart; dashboard/`PUT /api/v1/config` apply immediately.
 
 Charge-threshold writes are **not** performed. Prefer the **user systemd unit**
 for alpha. The system unit is for machines that should run LapGuard without a
@@ -28,6 +30,17 @@ login session.
 You own the config file. LapGuard writes it mode `0600` so webhook URLs and
 tokens are not world-readable. Do not put secrets in unit files or the
 environment.
+
+**Restart after disk edits.** LapGuard loads `config.json` only at startup.
+Changing the file with an editor, `jq`, or `install` does not affect the
+running process. Restart the user unit (`systemctl --user restart lapguard`)
+or the system unit (`sudo systemctl restart lapguard`) so
+`actions.real_enabled` / `safety.dry_run` take effect. The dashboard Save
+button and `PUT /api/v1/config` apply immediately and rewrite the file.
+There is no in-process file watch. `GET /api/v1/actions/preflight` shows
+the **active** runtime gates and this restart rule. Confirm you are
+editing the same file the process was started with (`-config`, user path,
+or `/etc/lapguard/config.json`).
 
 The service account must **own** `/etc/lapguard` (not merely be in the group)
 so the dashboard can persist settings. A `0750 root:lapguard` directory is
@@ -301,8 +314,9 @@ keeps working. Enable a Bearer token before Tailscale Serve:
    port 8585 publicly.
 6. Send `Authorization: Bearer <token>` on POST/PUT (settings, notification
    test, safety simulation, action preview). GET telemetry, capabilities,
-   discover, power, events, safety, healthz, config, auth/status, and
-   actions/status stay readable without a token in this alpha.
+   discover, power, events, safety, healthz, config, auth/status,
+   actions/status, and actions/preflight stay readable without a token in
+   this alpha.
 
 Rotate or recover without the old token (local config file access):
 
@@ -331,10 +345,12 @@ external to LapGuard; do not add sudoers or `CAP_SYS_BOOT` to “fix” it.
 CI and unit/integration tests never execute host poweroff, shutdown, reboot,
 sync, or Docker. They use temporary fake executables that only record argv.
 
-`GET /api/v1/actions/status` is read-only. It reports `real_enabled`,
-`safety_dry_run`, `require_ac_loss`, AC state, battery status/percent,
-cooldown, and whether the recording or real executor would be selected.
-It never exposes command arguments or secrets.
+`GET /api/v1/actions/status` and `GET /api/v1/actions/preflight` are
+read-only. They report `real_enabled`, `safety_dry_run`, AC state, battery
+status/percent, gates, executor type, and a safe config `source`/`path`
+(home directories shown as `~`). They never expose command arguments or
+secrets. Preflight always has `commands_executed: false` and explains that
+editing `config.json` on disk requires a restart.
 
 Public alpha testers should use [alpha-testing.md](alpha-testing.md).
 `make smoke` / `scripts/smoke-test.sh` never enables real actions.

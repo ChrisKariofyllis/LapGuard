@@ -130,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/actions/poweroff", s.secureWrite(s.handleActionPowerOff))
 	mux.HandleFunc("POST /api/v1/actions/docker-drain", s.secureWrite(s.handleActionDockerDrain))
 	mux.HandleFunc("GET /api/v1/actions/status", s.handleActionStatus)
+	mux.HandleFunc("GET /api/v1/actions/preflight", s.handleActionPreflight)
 	mux.HandleFunc("GET /api/v1/power", s.handlePower)
 	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("GET /api/v1/safety", s.handleGetSafety)

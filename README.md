@@ -52,7 +52,7 @@ safe for production yet.
 
 > **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
 
-### v0.9.1-alpha limitations
+### v0.9.3-alpha limitations
 
 - Optional Bearer auth; GET routes stay readable when auth is on.
 - Charge-threshold **writes are not wired**.
@@ -113,6 +113,16 @@ First start writes `~/.config/lapguard/config.json` (mode `0600`) and uses
 `~/.config/lapguard/events.db` for the outage log unless you pass `-config` /
 `-events-db`. Release binaries embed the dashboard; systemd units pass
 `-web-dir none` so they use that embed instead of a local `web/dist`.
+
+**Config reload:** LapGuard reads `config.json` at process start. Editing the
+file on disk while the daemon is running does **not** change the active
+settings (`actions.real_enabled`, `safety.dry_run`, and the rest). Restart
+the process after a disk edit (`systemctl --user restart lapguard` or
+`systemctl restart lapguard`). Dashboard Save and `PUT /api/v1/config`
+update the running process and rewrite the file. There is no automatic
+reload. `GET /api/v1/actions/preflight` reports the **runtime** gates and
+repeats this rule. Use `-config` if you intend a non-default file, then
+restart after editing that same file.
 
 Privacy-safe hardware report (no daemon required):
 
@@ -263,8 +273,8 @@ SHA-256 hash is written to `config.json` (mode `0600`). Send it as
 `Authorization: Bearer <token>` on POST/PUT. Do not put tokens in URLs.
 
 GET telemetry, capabilities, discover, power, events, safety, healthz,
-config, auth/status, and actions/status stay readable without a token in this
-alpha. Protecting GET is reserved for a later release.
+config, auth/status, actions/status, and actions/preflight stay readable
+without a token in this alpha. Protecting GET is reserved for a later release.
 
 With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are
 the security boundary. Only trusted tailnet users/devices should be allowed.
@@ -399,7 +409,8 @@ sysfs and without commands.
 **Config.** `GET`/`PUT /api/v1/config` persist notifications, shutdown
 percents, Docker *intent*, safety flags, and experimental action gates.
 Critical percent must be lower than warning. Defaults keep
-`safety.dry_run=true` and `actions.real_enabled=false`.
+`safety.dry_run=true` and `actions.real_enabled=false`. `PUT` updates the
+running process. Editing `config.json` on disk does not; restart afterward.
 
 **Discovery.** Features are enabled only when the matching sysfs files,
 modules, or tools exist. Missing hardware is `none` plus `why_not`. See
@@ -422,7 +433,8 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | GET | `/api/v1/events` | Recent outage events (`limit`, optional `type`) |
 | POST | `/api/v1/actions/test-notification` | Test message (enabled provider required) |
 | POST | `/api/v1/actions/preview` | Intended plan only (`commands_executed=false`) |
-| GET | `/api/v1/actions/status` | Read-only gates: AC, battery, cooldown, executor type (`recording`/`real`) |
+| GET | `/api/v1/actions/status` | Read-only gates, safe config path/source, reload=`restart_required_for_disk_edits` |
+| GET | `/api/v1/actions/preflight` | Read-only runtime action check (`commands_executed=false`); explains that disk edits need a restart |
 | POST | `/api/v1/actions/poweroff` | Manual poweroff (experimental; confirm `POWER_OFF`) |
 | POST | `/api/v1/actions/docker-drain` | Manual Docker drain (experimental; confirm `STOP_DOCKER`) |
 | GET | `/api/v1/safety` | Controller state, thresholds, intended actions |
@@ -436,7 +448,10 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 `chat_id_configured`, `auth_enabled`, and `token_configured`. It never returns
 `token_hash`, the plaintext token, or host command strings.
 `GET /api/v1/actions/status` never returns command arguments, executable
-paths, or secrets. `execution.shutdown` and `execution.docker` are `disabled`
+paths, or secrets. Home directories in `config.path` are shown as `~`.
+`GET /api/v1/actions/preflight` is the same runtime snapshot plus an
+explanation that on-disk `config.json` edits require a restart.
+`execution.shutdown` and `execution.docker` are `disabled`
 by default. When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`.
 GET routes listed above stay readable.
 

@@ -1,6 +1,6 @@
 # Public alpha testing checklist
 
-This is the tester checklist for **LapGuard v0.9.1-alpha**.
+This is the tester checklist for **LapGuard v0.9.3-alpha**.
 
 Real Docker drain and host poweroff are **experimental and disabled by default**.
 They are **not** safe for production. Automatic low-battery shutdown is **not
@@ -55,6 +55,7 @@ LAPGUARD_URL=http://127.0.0.1:8585 LAPGUARD_TOKEN='…' sh scripts/smoke-test.sh
 - [ ] `GET /api/v1/capabilities`
 - [ ] `GET /api/v1/discover` (do **not** share this JSON; use `lapguard discover --report` for GitHub)
 - [ ] `GET /api/v1/actions/status` shows `real_enabled: false`, `safety_dry_run: true`, `commands_executed: false`, `executor: "recording"`
+- [ ] `GET /api/v1/actions/preflight` is read-only (`commands_executed: false`) and says a restart is required after editing `config.json` on disk
 
 ### Authentication
 

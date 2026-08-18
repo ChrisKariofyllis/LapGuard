@@ -34,6 +34,9 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "auth" {
 		return runAuth(os.Stdout, os.Stderr, args[1:])
 	}
+	if len(args) > 0 && args[0] == "tailscale" {
+		return runTailscale(os.Stdout, os.Stderr, args[1:])
+	}
 
 	cfg, err := config.Load(args)
 	if err != nil {
@@ -53,11 +56,13 @@ func run(args []string) error {
 		"provider", cfg.Provider,
 		"sysfs_root", cfg.SysfsRoot,
 		"threshold_method", cfg.ThresholdMethod,
-		"config", cfg.ConfigPath,
-		"events_db", cfg.EventsDBPath(),
+		"config_source", cfg.ConfigSource(),
+		"config", cfg.SafeConfigPath(),
+		"events_db", cfg.SafeEventsDBPath(),
 		"power_poll", cfg.PowerPoll.String(),
 		"power_debounce", cfg.PowerDebounce.String(),
 	)
+	cfg.LogStartup(log)
 	if !cfg.Loopback() {
 		log.Warn("listen address is not loopback; remote access should go through Tailscale, not a public bind")
 	}
@@ -109,11 +114,11 @@ func run(args []string) error {
 	if path := cfg.EventsDBPath(); path != "" {
 		opened, err := storage.Open(path)
 		if err != nil {
-			log.Warn("event log unavailable", "path", path, "err", err)
+			log.Warn("event log unavailable", "path", config.SafeDisplayPath(path), "err", err)
 		} else {
 			store = opened
 			defer func() { _ = store.Close() }()
-			log.Info("event log ready", "path", path)
+			log.Info("event log ready", "path", config.SafeDisplayPath(path))
 		}
 	}
 
@@ -151,9 +156,9 @@ func run(args []string) error {
 
 	if cfg.ShouldWrite() {
 		if err := cfg.Save(cfg.ConfigPath); err != nil {
-			log.Warn("could not write first-run config", "path", cfg.ConfigPath, "err", err)
+			log.Warn("could not write first-run config", "path", cfg.SafeConfigPath(), "err", err)
 		} else {
-			log.Info("wrote first-run config", "path", cfg.ConfigPath)
+			log.Info("wrote first-run config", "path", cfg.SafeConfigPath())
 		}
 	}
 

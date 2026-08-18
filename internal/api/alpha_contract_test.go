@@ -51,6 +51,7 @@ func TestPublicAlphaContract(t *testing.T) {
 		"/api/v1/capabilities",
 		"/api/v1/discover",
 		"/api/v1/actions/status",
+		"/api/v1/actions/preflight",
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))

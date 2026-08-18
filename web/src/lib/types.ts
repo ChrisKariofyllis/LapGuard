@@ -239,6 +239,36 @@ export type ActionStatus = {
   warnings: string[];
   automatic_shutdown_executed?: boolean;
   plan?: string[];
+  config?: {
+    source: 'default' | 'file' | 'cli' | string;
+    path: string;
+    reload: string;
+    disk_edits_require_restart: boolean;
+    api_updates_apply_immediately: boolean;
+  };
+  restart_required_for_disk_edits?: string;
+};
+
+export type ActionPreflight = {
+  real_enabled: boolean;
+  safety_dry_run: boolean;
+  executor: 'recording' | 'real' | string;
+  ac_state: 'AC' | 'BATTERY' | 'UNKNOWN' | string;
+  battery_status: string;
+  battery_percent?: number | null;
+  discharging: boolean;
+  ready: boolean;
+  gates: string[];
+  commands_executed: boolean;
+  automatic_shutdown_executed?: boolean;
+  config: {
+    source: 'default' | 'file' | 'cli' | string;
+    path: string;
+    reload: string;
+    disk_edits_require_restart: boolean;
+    api_updates_apply_immediately: boolean;
+  };
+  explanation: string;
 };
 
 export type PowerAdapter = {

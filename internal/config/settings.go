@@ -146,7 +146,8 @@ func (c Config) APIView() APIConfig {
 			"Notification delivery runs only when a provider is configured and enabled.",
 			"Automatic low-battery shutdown is not executed in this alpha. The safety controller remains a recorder.",
 			"Manual Docker drain and poweroff are experimental, disabled by default, and require actions.real_enabled=true, safety.dry_run=false, and explicit confirmation. Do not enable them on an important machine.",
-			"GET telemetry, capabilities, discover, power, events, safety, healthz, auth/status, and actions/status stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
+			"GET telemetry, capabilities, discover, power, events, safety, healthz, auth/status, actions/status, and actions/preflight stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
+			DiskEditRestartMessage,
 		},
 	}
 }

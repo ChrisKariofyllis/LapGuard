@@ -57,6 +57,7 @@ type Config struct {
 	PowerPoll       time.Duration       `json:"-"`
 	PowerDebounce   time.Duration       `json:"-"`
 	ConfigPath      string              `json:"-"`
+	Source          string              `json:"-"`
 
 	setFlags       map[string]bool `json:"-"`
 	writeIfMissing bool            `json:"-"`
@@ -77,6 +78,7 @@ func defaults() Config {
 		Actions:         DefaultActions(),
 		PowerPoll:       DefaultPowerPoll,
 		PowerDebounce:   DefaultPowerDebounce,
+		Source:          ConfigSourceDefault,
 		setFlags:        map[string]bool{},
 	}
 }
@@ -110,6 +112,7 @@ func ApplyPersistentConfig(cfg Config) (Config, error) {
 		}
 	}
 	if path == "" {
+		cfg.Source = ConfigSourceDefault
 		return cfg, nil
 	}
 
@@ -117,6 +120,11 @@ func ApplyPersistentConfig(cfg Config) (Config, error) {
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			cfg.writeIfMissing = true
+			if explicit {
+				cfg.Source = ConfigSourceCLI
+			} else {
+				cfg.Source = ConfigSourceDefault
+			}
 			return cfg, nil
 		}
 		return Config{}, err
@@ -125,6 +133,11 @@ func ApplyPersistentConfig(cfg Config) (Config, error) {
 	merged := overlayFlags(file, cfg)
 	merged.ConfigPath = path
 	merged.setFlags = cfg.setFlags
+	if explicit {
+		merged.Source = ConfigSourceCLI
+	} else {
+		merged.Source = ConfigSourceFile
+	}
 	return merged, nil
 }
 

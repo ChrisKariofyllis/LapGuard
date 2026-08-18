@@ -150,6 +150,24 @@ if status.get("commands_executed") is not False:
 if status.get("executor") != "recording":
     sys.stderr.write(f"executor {status.get('executor')!r}, want recording\n")
     sys.exit(1)
+if status.get("config", {}).get("disk_edits_require_restart") is not True:
+    sys.stderr.write("actions/status must say disk edits require restart\n")
+    sys.exit(1)
+
+preflight = check_get("/api/v1/actions/preflight", "real_enabled", "safety_dry_run", "explanation")
+if preflight.get("real_enabled") is not False or preflight.get("safety_dry_run") is not True:
+    sys.stderr.write("preflight defaults are unsafe\n")
+    sys.exit(1)
+if preflight.get("commands_executed") is not False:
+    sys.stderr.write("actions/preflight claimed commands_executed\n")
+    sys.exit(1)
+if "Restart LapGuard" not in str(preflight.get("explanation", "")):
+    sys.stderr.write("preflight missing restart explanation\n")
+    sys.exit(1)
+for leak in leaks:
+    if leak in json.dumps(preflight):
+        sys.stderr.write(f"preflight leaked {leak!r}\n")
+        sys.exit(1)
 
 code, preview = request("POST", "/api/v1/actions/preview", {})
 if code == 401 and not token:

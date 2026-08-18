@@ -1,6 +1,6 @@
 # Contributing to LapGuard
 
-LapGuard is an open-source **alpha** (v0.9.1). Automatic low-battery shutdown is
+LapGuard is an open-source **alpha** (v0.9.3-alpha). Automatic low-battery shutdown is
 not executed. Real Docker drain and host poweroff are experimental, disabled by
 default, and must not be enabled on an important machine. Do not add sudoers
 or polkit rules unless a maintainer explicitly asks for that work. Tests may

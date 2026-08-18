@@ -268,10 +268,12 @@
     <div>
       <h2 class="text-sm font-medium">Configuration</h2>
       <p class="mt-1 text-xs text-mist">
-        Stored in the process config file (mode 0600). Default for a user
+		Stored in the process config file (mode 0600). Default for a user
         install is <span class="font-mono">~/.config/lapguard/config.json</span>;
         the system unit uses <span class="font-mono">/etc/lapguard/config.json</span>.
-        Secrets are never written to logs.
+        Dashboard Save and <span class="font-mono">PUT /api/v1/config</span>
+        apply immediately. Editing that file on disk does not — restart
+        LapGuard afterward. Secrets are never written to logs.
       </p>
     </div>
     <button
