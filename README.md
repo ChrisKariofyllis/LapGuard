@@ -120,28 +120,90 @@ make run-fixture
 
 More in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Tailscale access
+## Remote access (Tailscale Serve)
 
-Keep the default listen address **`127.0.0.1:8585`**. Do not bind `0.0.0.0`.
+LapGuard listens only on loopback. **Tailscale Serve** is an external reverse
+proxy in front of that local process. LapGuard does not bind to a Tailscale
+`100.x.y.z` address, does not run `tailscale` or `sudo`, and does not use
+Funnel.
 
-Options that leave the process on loopback:
+```
+LapGuard                  ->  127.0.0.1:8585
+Tailscale Serve           ->  proxies that localhost service to your tailnet
+Remote Tailscale devices  ->  open the dashboard over the tailnet
+```
 
-- **SSH tunnel:** `ssh -L 8585:127.0.0.1:8585 user@laptop`
-- **Tailscale Serve** (tailnet only, not the public internet):
+Keep the default listen address **`127.0.0.1:8585`**. Do not bind `0.0.0.0`
+just to use Tailscale. Do not expose port 8585 on the public Internet.
+Existing `-listen` and `config.json` listen settings still apply; leave them
+on loopback.
 
-  ```bash
-  tailscale serve --bg http://127.0.0.1:8585
-  ```
+### Local process
 
-Use Tailscale ACLs / who is on the tailnet as the access-control layer.
-**Do not use Tailscale Funnel** to publish LapGuard to the public internet.
-The API has no login, CSRF tokens, or TLS of its own.
+Install and authenticate Tailscale yourself (outside LapGuard). Then start
+LapGuard locally:
+
+```bash
+./lapguard -web-dir none
+```
+
+The dashboard stays available on the machine at:
+
+```
+http://127.0.0.1:8585
+```
+
+### Expose it through Tailscale Serve
+
+Prefer an explicit localhost target. On current Tailscale CLIs:
+
+```bash
+sudo tailscale serve --bg http://127.0.0.1:8585
+```
+
+If that syntax is rejected, the installed Tailscale version uses a different
+Serve CLI. Check:
+
+```bash
+tailscale serve --help
+```
+
+Useful status commands:
+
+```bash
+tailscale status
+tailscale ip -4
+tailscale serve status
+```
+
+Serve is reachable **only inside the tailnet** when configured normally. Use
+Tailscale ACLs to restrict access to trusted users and devices.
+
+**Do not use Tailscale Funnel.** Funnel publishes to the public Internet.
+
+An SSH tunnel is an alternative that also leaves the process on loopback:
+
+```bash
+ssh -L 8585:127.0.0.1:8585 user@laptop
+```
+
+Install-oriented steps and troubleshooting are in
+[docs/install.md](docs/install.md#remote-access-with-tailscale-serve).
+
+### Security
+
+LapGuard has **no application-level authentication**. Anyone who can reach the
+HTTP port can read telemetry and change settings. With Serve, **Tailscale
+identity and ACLs are the security boundary**. Only trusted tailnet
+users/devices should be allowed. Do not combine this setup with Funnel or any
+other public exposure of port 8585.
 
 ## Security limitations
 
 - **No application authentication or authorization.** Anyone who can reach
   the port can read telemetry, change notification settings, and trigger
-  dry-run safety tests.
+  dry-run safety tests. Remote access should use Tailscale Serve plus ACLs
+  (or SSH), not a public bind. See [Remote access](#remote-access-tailscale-serve).
 - Secrets in `config.json` (webhook URLs, bot tokens, chat IDs) are stored
   mode `0600` and are **redacted** from API responses and logs. They are
   still present on disk. Never commit that file.

@@ -66,7 +66,10 @@ Release artifacts are `lapguard_<version>_linux-amd64` and
    For the **system** unit, skip this step; the service user writes
    `/etc/lapguard/config.json` on first start.
 
-5. Open `http://127.0.0.1:8585`. Do not change the bind to `0.0.0.0`.
+5. Open `http://127.0.0.1:8585`. Leave the default listen address
+   (`127.0.0.1:8585`). Do not bind `0.0.0.0` and do not bind a Tailscale
+   `100.x.y.z` address. For tailnet access, use Tailscale Serve in front of
+   that localhost port — see [Remote access with Tailscale Serve](#remote-access-with-tailscale-serve).
 
 Privacy-safe hardware report (does not start the HTTP server):
 
@@ -128,10 +131,114 @@ Optional helpers (do not grant extra privileges):
 There is **no** sudoers drop-in in this repository. Do not add
 `lapguard ALL=(ALL) NOPASSWD: ALL` or equivalent.
 
+## Remote access with Tailscale Serve
+
+LapGuard must keep listening on **`127.0.0.1:8585`**. Tailscale Serve is an
+external reverse proxy. It is not built into the LapGuard process.
+
+```
+LapGuard                  ->  127.0.0.1:8585
+Tailscale Serve           ->  proxies that localhost service to your tailnet
+Remote Tailscale devices  ->  open the dashboard over the tailnet
+```
+
+Do **not** bind LapGuard to a Tailscale `100.x.y.z` address, to `0.0.0.0`, or
+to any public interface just to use Tailscale. Existing `-listen` / config
+listen flags still work; leave them on loopback. LapGuard never runs
+`tailscale` or `sudo` for you.
+
+### 1. Install Tailscale separately
+
+Install Tailscale and authenticate the laptop on your tailnet using Tailscale's
+own docs. That is outside LapGuard.
+
+### 2. Start LapGuard on localhost
+
+```bash
+./lapguard -web-dir none
+```
+
+(`-web-dir none` uses the dashboard embedded in a release binary. Systemd
+units already pass this flag.)
+
+Confirm the local dashboard:
+
+```
+http://127.0.0.1:8585
+```
+
+### 3. Proxy it with Tailscale Serve
+
+Prefer an explicit localhost target. On current Tailscale CLIs:
+
+```bash
+sudo tailscale serve --bg http://127.0.0.1:8585
+```
+
+If that syntax is rejected, check the installed CLI:
+
+```bash
+tailscale serve --help
+```
+
+Then inspect:
+
+```bash
+tailscale status
+tailscale ip -4
+tailscale serve status
+```
+
+Serve is accessible **only inside the tailnet** when configured normally.
+Use Tailscale ACLs to limit access to trusted users and devices.
+
+**Do not use Tailscale Funnel.** Do not expose port 8585 on the public
+Internet. Do not reconfigure LapGuard to listen on `0.0.0.0` for this.
+
+### Security
+
+LapGuard has **no application-level authentication**. With this setup,
+**Tailscale identity and ACLs are the security boundary**. Only trusted
+Tailscale users and devices should be allowed to reach the dashboard. Do not
+use Funnel or any other public Internet exposure.
+
+### Troubleshooting
+
+Verify LapGuard is listening:
+
+```bash
+curl http://127.0.0.1:8585/api/v1/healthz
+```
+
+Verify Tailscale:
+
+```bash
+tailscale status
+tailscale ip -4
+```
+
+Inspect Serve:
+
+```bash
+tailscale serve status
+```
+
+Check the local listening socket (should be loopback, not `0.0.0.0`):
+
+```bash
+ss -ltn | grep 8585
+```
+
+If Serve cannot reach the app, confirm LapGuard is still bound to
+`127.0.0.1:8585` and that you did not enable Funnel. To remove a background
+Serve config, use `tailscale serve off` (see `tailscale serve --help`).
+
 ## What this alpha will not do
 
 - Execute `docker stop` / `docker kill`
 - Execute `systemctl poweroff`, `shutdown`, `reboot`, or `sync`
 - Write charge start/stop thresholds to sysfs or via `tlp setcharge`
 - Install via a remote shell pipe
+- Bind the HTTP server to `0.0.0.0`, a Tailscale `100.x` address, or a public interface
+- Run `tailscale`, Funnel, or `sudo` on your behalf
 - Expose the API on a public address
