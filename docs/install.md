@@ -53,6 +53,18 @@ Release artifacts are `lapguard_<version>_linux-amd64` and
 `-tags embedui` (dashboard inside the binary). Tagging only creates a
 **draft** GitHub Release; a maintainer must publish it.
 
+A reviewable user-space helper is [`install-quick.sh`](install-quick.sh). It
+downloads a published release, checks `SHA256SUMS`, installs to
+`~/.local/bin`, writes a **new** config only if none exists (never overwrites
+tokens), and installs the user systemd unit. It does not use sudo, does not
+start the service, and does not enable real actions.
+
+```bash
+# from a clone of this repo
+sh docs/install-quick.sh            # newest GitHub release
+sh docs/install-quick.sh 0.9.6-alpha
+```
+
 1. Download the binary for your architecture and `SHA256SUMS` from a
    **published** [GitHub Release](https://github.com/ChrisKariofyllis/LapGuard/releases).
 2. Verify:
