@@ -239,16 +239,18 @@ on the same tailnet). That does not change the listen address.
 
 ### Security
 
-When `auth.enabled` is **false** (the default), LapGuard has **no application-level
-authentication**. Anyone who can reach the HTTP port can change settings.
-Enable a Bearer token **before** exposing the dashboard over Tailscale:
+Auth is **on by default**. Loopback PUT/POST may omit the Bearer token. Remote
+clients (Tailscale Serve included) must send `Authorization: Bearer` on PUT/POST.
+GET telemetry stays readable without a token. Full detail:
+[security.md](security.md).
+
+On first start LapGuard prints a token **once** if none exists. Store it in a
+password manager. Confirm flags (not the secret):
 
 ```bash
-lapguard auth generate
+curl -sS http://127.0.0.1:8585/api/v1/auth/status
+lapguard auth status
 ```
-
-Store the printed token in a password manager. Send `Authorization: Bearer <token>`
-on POST/PUT. GET telemetry stays readable without a token in this alpha.
 
 With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are the
 security boundary. Only trusted tailnet users and devices should be allowed.
@@ -294,29 +296,23 @@ Or run the built-in probe (read-only; never executes sudo):
 lapguard tailscale check --pretty
 ```
 
-## Optional API token
+## API token
 
-Authentication is **off** by default so local development on `127.0.0.1:8585`
-keeps working. Enable a Bearer token before Tailscale Serve:
+Auth is **on by default**. Loopback `127.0.0.1:8585` may omit the token for
+PUT/POST. Remote access needs Bearer.
 
-1. Start LapGuard locally on `127.0.0.1:8585`.
-2. Generate a token on the laptop:
-
-   ```bash
-   lapguard auth generate
-   ```
-
-3. Store the printed token in a password manager. It is shown **once**.
-   Only a SHA-256 hash is saved in `config.json` (mode `0600`).
-4. Authentication is enabled by that command. Confirm with
-   `lapguard auth status`.
-5. Configure Tailscale Serve as above. Do **not** use Funnel or expose
+1. Start LapGuard locally on `127.0.0.1:8585`. On first run it prints a token
+   **once** if `token_hash` is missing.
+2. Store the printed token in a password manager. Only a SHA-256 hash is saved
+   in `config.json` (mode `0600`).
+3. Confirm with `lapguard auth status` or `GET /api/v1/auth/status` (never the
+   secret).
+4. Configure Tailscale Serve as above. Do **not** use Funnel or expose
    port 8585 publicly.
-6. Send `Authorization: Bearer <token>` on POST/PUT (settings, notification
-   test, safety simulation, action preview). GET telemetry, capabilities,
-   discover, power, events, safety, healthz, config, auth/status,
-   actions/status, and actions/preflight stay readable without a token in
-   this alpha.
+5. From Tailscale, send `Authorization: Bearer <token>` on PUT/POST. GET
+   telemetry, capabilities, discover, power, events, safety, healthz, config,
+   auth/status, actions/status, and actions/preflight stay readable without a
+   token.
 
 Rotate or recover without the old token (local config file access):
 
@@ -326,9 +322,8 @@ lapguard auth disable   # turns auth off
 ```
 
 HTTP `POST /api/v1/auth/rotate` never returns a plaintext token. Disable over
-HTTP requires a valid Bearer token when auth is on, or a loopback request to
-`127.0.0.1` when auth is off. Remote callers cannot enable or disable auth
-without a token.
+HTTP is allowed from loopback without a token when `allow_loopback_no_token`
+is true. Remote callers need a valid Bearer token.
 
 Real Docker drain and host poweroff are experimental, disabled by default, and
 are **not** safe for production. Do not enable them on an important machine.

@@ -16,7 +16,8 @@ func runAuth(stdout, stderr io.Writer, args []string) error {
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
 		fmt.Fprintf(stderr, "Usage: lapguard auth <status|generate|rotate|disable> [-config PATH]\n")
-		fmt.Fprintf(stderr, "\nOptional Bearer token authentication. Tokens are shown once on stdout.\n")
+		fmt.Fprintf(stderr, "\nBearer token authentication (on by default). Loopback PUT/POST may omit the token.\n")
+		fmt.Fprintf(stderr, "Remote clients need Authorization: Bearer. Tokens are shown once on stdout.\n")
 		fmt.Fprintf(stderr, "Only a SHA-256 hash is stored in config.json (mode 0600).\n")
 		fmt.Fprintf(stderr, "Never put tokens in URLs. This command never starts the HTTP server.\n\n")
 		fs.PrintDefaults()
@@ -109,6 +110,7 @@ func writeAuthStatus(stdout io.Writer, cfg config.Config) error {
 	view := cfg.Auth.View()
 	fmt.Fprintf(stdout, "auth_enabled=%t\n", view.AuthEnabled)
 	fmt.Fprintf(stdout, "token_configured=%t\n", view.TokenConfigured)
+	fmt.Fprintf(stdout, "allow_loopback_no_token=%t\n", view.AllowLoopbackNoToken)
 	if view.TokenCreatedAt != "" {
 		fmt.Fprintf(stdout, "token_created_at=%s\n", view.TokenCreatedAt)
 	}

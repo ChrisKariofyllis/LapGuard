@@ -179,28 +179,29 @@ func (s *Server) currentConfig() config.Config {
 }
 
 type capabilitiesResponse struct {
-	App              string                    `json:"app"`
-	Version          string                    `json:"version"`
-	Provider         string                    `json:"provider"`
-	Listen           string                    `json:"listen"`
-	BatteryPresent   bool                      `json:"battery_present"`
-	BatteryName      string                    `json:"battery_name,omitempty"`
-	SysfsRoot        string                    `json:"sysfs_root,omitempty"`
-	Hostname         string                    `json:"hostname,omitempty"`
-	OS               string                    `json:"os,omitempty"`
-	Kernel           string                    `json:"kernel,omitempty"`
-	AvailableFields  []string                  `json:"available_fields"`
-	NamingConvention string                    `json:"naming_convention,omitempty"`
-	PowerCalculation string                    `json:"power_calculation,omitempty"`
-	ThresholdMethod  string                    `json:"threshold_method"`
-	Features         []discovery.FeatureStatus `json:"features"`
-	FeatureFlags     discovery.Features        `json:"feature_flags"`
-	Tools            discovery.Tools           `json:"tools"`
-	KernelModules    []string                  `json:"kernel_modules"`
-	AuthEnabled      bool                      `json:"auth_enabled"`
-	AuthWarning      string                    `json:"auth_warning,omitempty"`
-	ProtectGET       bool                      `json:"protect_get"`
-	Battery          discovery.BatteryIdentity `json:"battery"`
+	App                  string                    `json:"app"`
+	Version              string                    `json:"version"`
+	Provider             string                    `json:"provider"`
+	Listen               string                    `json:"listen"`
+	BatteryPresent       bool                      `json:"battery_present"`
+	BatteryName          string                    `json:"battery_name,omitempty"`
+	SysfsRoot            string                    `json:"sysfs_root,omitempty"`
+	Hostname             string                    `json:"hostname,omitempty"`
+	OS                   string                    `json:"os,omitempty"`
+	Kernel               string                    `json:"kernel,omitempty"`
+	AvailableFields      []string                  `json:"available_fields"`
+	NamingConvention     string                    `json:"naming_convention,omitempty"`
+	PowerCalculation     string                    `json:"power_calculation,omitempty"`
+	ThresholdMethod      string                    `json:"threshold_method"`
+	Features             []discovery.FeatureStatus `json:"features"`
+	FeatureFlags         discovery.Features        `json:"feature_flags"`
+	Tools                discovery.Tools           `json:"tools"`
+	KernelModules        []string                  `json:"kernel_modules"`
+	AuthEnabled          bool                      `json:"auth_enabled"`
+	AuthWarning          string                    `json:"auth_warning,omitempty"`
+	ProtectGET           bool                      `json:"protect_get"`
+	AllowLoopbackNoToken bool                      `json:"allow_loopback_no_token"`
+	Battery              discovery.BatteryIdentity `json:"battery"`
 }
 
 func (s *Server) handleTelemetry(w http.ResponseWriter, r *http.Request) {
@@ -239,28 +240,29 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := capabilitiesResponse{
-		App:              config.AppName,
-		Version:          config.Version,
-		Provider:         s.provider.Kind(),
-		Listen:           cfg.Listen,
-		BatteryPresent:   present,
-		BatteryName:      name,
-		SysfsRoot:        firstNonEmpty(probe.SysfsRoot, cfg.SysfsRoot),
-		Hostname:         report.Hostname,
-		OS:               report.OS,
-		Kernel:           report.Kernel,
-		AvailableFields:  fields,
-		NamingConvention: firstNonEmpty(probe.NamingConvention, report.NamingConvention),
-		PowerCalculation: firstNonEmpty(probe.PowerCalculation, report.PowerCalculation),
-		ThresholdMethod:  report.Features.ChargeThresholds,
-		Features:         report.FeatureStatuses(),
-		FeatureFlags:     report.Features,
-		Tools:            report.AvailableTools,
-		KernelModules:    report.KernelModules,
-		Battery:          report.Battery,
-		AuthEnabled:      cfg.Auth.Enabled,
-		AuthWarning:      cfg.Auth.Warning(),
-		ProtectGET:       false,
+		App:                  config.AppName,
+		Version:              config.Version,
+		Provider:             s.provider.Kind(),
+		Listen:               cfg.Listen,
+		BatteryPresent:       present,
+		BatteryName:          name,
+		SysfsRoot:            firstNonEmpty(probe.SysfsRoot, cfg.SysfsRoot),
+		Hostname:             report.Hostname,
+		OS:                   report.OS,
+		Kernel:               report.Kernel,
+		AvailableFields:      fields,
+		NamingConvention:     firstNonEmpty(probe.NamingConvention, report.NamingConvention),
+		PowerCalculation:     firstNonEmpty(probe.PowerCalculation, report.PowerCalculation),
+		ThresholdMethod:      report.Features.ChargeThresholds,
+		Features:             report.FeatureStatuses(),
+		FeatureFlags:         report.Features,
+		Tools:                report.AvailableTools,
+		KernelModules:        report.KernelModules,
+		Battery:              report.Battery,
+		AuthEnabled:          cfg.Auth.Enabled,
+		AuthWarning:          cfg.Auth.Warning(),
+		ProtectGET:           false,
+		AllowLoopbackNoToken: cfg.Auth.AllowLoopbackNoToken,
 	}
 	if resp.KernelModules == nil {
 		resp.KernelModules = []string{}
@@ -308,11 +310,12 @@ func (s *Server) applyConfig(report discovery.CapabilityReport, cfg config.Confi
 func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	cfg := s.currentConfig()
 	body := map[string]any{
-		"status":       "ok",
-		"app":          config.AppName,
-		"version":      config.Version,
-		"auth_enabled": cfg.Auth.Enabled,
-		"protect_get":  false,
+		"status":                  "ok",
+		"app":                     config.AppName,
+		"version":                 config.Version,
+		"auth_enabled":            cfg.Auth.Enabled,
+		"protect_get":             false,
+		"allow_loopback_no_token": cfg.Auth.AllowLoopbackNoToken,
 	}
 	if warn := cfg.Auth.Warning(); warn != "" {
 		body["auth_warning"] = warn

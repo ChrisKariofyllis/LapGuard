@@ -286,7 +286,11 @@ func TestUnknownAPIIs404(t *testing.T) {
 }
 
 func TestHealthz(t *testing.T) {
-	srv := New(battery.NewMockProvider(), config.Config{Listen: "127.0.0.1:8585"}, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
+	cfg, err := config.Parse(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(battery.NewMockProvider(), cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/healthz", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -300,11 +304,14 @@ func TestHealthz(t *testing.T) {
 	if body["status"] != "ok" || body["app"] != "lapguard" {
 		t.Fatalf("body %+v", body)
 	}
-	if body["auth_enabled"] != false {
-		t.Fatalf("auth should be disabled by default: %+v", body)
+	if body["auth_enabled"] != true {
+		t.Fatalf("auth should be enabled by default: %+v", body)
+	}
+	if body["allow_loopback_no_token"] != true {
+		t.Fatalf("loopback bypass should default on: %+v", body)
 	}
 	if _, ok := body["auth_warning"].(string); !ok {
-		t.Fatal("expected auth_warning when authentication is disabled")
+		t.Fatal("expected auth_warning describing loopback vs remote")
 	}
 }
 

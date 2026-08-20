@@ -43,7 +43,7 @@ func TestAutoDrainWriteRequiresAuth(t *testing.T) {
 		{http.MethodPost, "/api/v1/auto-drain/respond", `{"action":"no"}`},
 	} {
 		rec := httptest.NewRecorder()
-		srv.Handler().ServeHTTP(rec, jsonRequest(tc.method, tc.path, tc.body))
+		srv.Handler().ServeHTTP(rec, remoteJSONRequest(tc.method, tc.path, tc.body))
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s status %d", tc.method, tc.path, rec.Code)
 		}

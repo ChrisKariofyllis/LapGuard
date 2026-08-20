@@ -9,14 +9,23 @@ import (
 	"time"
 )
 
-func TestAuthDefaultDisabled(t *testing.T) {
+func TestAuthDefaultEnabled(t *testing.T) {
 	cfg := defaults()
-	if cfg.Auth.Enabled || cfg.Auth.TokenHash != "" {
-		t.Fatalf("%+v", cfg.Auth)
+	if !cfg.Auth.Enabled {
+		t.Fatal("auth.enabled must default true")
+	}
+	if !cfg.Auth.AllowLoopbackNoToken {
+		t.Fatal("allow_loopback_no_token must default true")
+	}
+	if cfg.Auth.TokenHash != "" {
+		t.Fatal("no token hash until minted")
 	}
 	view := cfg.APIView()
-	if view.AuthEnabled || view.TokenConfigured {
-		t.Fatalf("API view leaked auth: %+v", view)
+	if !view.AuthEnabled || view.TokenConfigured {
+		t.Fatalf("API view %+v", view)
+	}
+	if !view.AllowLoopbackNoToken {
+		t.Fatal("API view missing loopback flag")
 	}
 	if strings.Contains(strings.ToLower(fmtAPI(view)), "token_hash") {
 		t.Fatal("API view included token_hash")
@@ -106,5 +115,67 @@ func TestAuthPersistedWithoutPlaintext(t *testing.T) {
 	view := loaded.APIView()
 	if strings.Contains(fmtAPI(view), loaded.Auth.TokenHash) || strings.Contains(fmtAPI(view), token) {
 		t.Fatal("API view leaked hash or token")
+	}
+}
+
+func TestAuthMigrationMissingSectionEnables(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"listen":"127.0.0.1:8585"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !loaded.Auth.Enabled || !loaded.Auth.AllowLoopbackNoToken {
+		t.Fatalf("missing auth section should take defaults: %+v", loaded.Auth)
+	}
+}
+
+func TestAuthMigrationKeepsExplicitOff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"auth":{"enabled":false}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Auth.Enabled {
+		t.Fatal("explicit auth.enabled=false must be kept")
+	}
+	if !loaded.Auth.AllowLoopbackNoToken {
+		t.Fatal("missing allow_loopback_no_token should default true")
+	}
+}
+
+func TestEnsureAuthTokenMintsOnce(t *testing.T) {
+	cfg := defaults()
+	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	token, minted, err := cfg.EnsureAuthToken(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !minted || token == "" || !strings.HasPrefix(token, "lg_") {
+		t.Fatalf("minted=%t token %q", minted, token)
+	}
+	if token == cfg.Auth.TokenHash || strings.Contains(cfg.Auth.TokenHash, token) {
+		t.Fatal("plaintext must not be stored")
+	}
+	again, minted2, err := cfg.EnsureAuthToken(now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if minted2 || again != "" {
+		t.Fatal("second ensure must not mint")
+	}
+	if !cfg.Auth.VerifyToken(token) {
+		t.Fatal("first token should still verify")
+	}
+
+	cfg.DisableAuth()
+	none, minted3, err := cfg.EnsureAuthToken(now)
+	if err != nil || minted3 || none != "" {
+		t.Fatalf("disabled auth must not mint: minted=%t err=%v", minted3, err)
 	}
 }

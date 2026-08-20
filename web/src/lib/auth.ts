@@ -28,3 +28,8 @@ export function authHeaders(): Record<string, string> {
   }
   return { Authorization: `Bearer ${token}` };
 }
+
+export function isLoopbackPage(): boolean {
+  const host = window.location.hostname.replace(/^\[|\]$/g, '');
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}

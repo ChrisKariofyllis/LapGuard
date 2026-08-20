@@ -11,7 +11,7 @@ import (
 	"lapguard/internal/config"
 )
 
-func TestRunAuthStatusDisabled(t *testing.T) {
+func TestRunAuthStatusDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	cfg := mustParseConfig(t)
@@ -24,7 +24,10 @@ func TestRunAuthStatusDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "auth_enabled=false") {
+	if !strings.Contains(out, "auth_enabled=true") {
+		t.Fatalf("%s", out)
+	}
+	if !strings.Contains(out, "allow_loopback_no_token=true") {
 		t.Fatalf("%s", out)
 	}
 	if strings.Contains(out, "token_hash") || strings.Contains(strings.ToLower(out), "lg_") {

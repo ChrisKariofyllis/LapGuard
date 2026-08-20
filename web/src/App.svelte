@@ -5,7 +5,7 @@
   import SafetyPanel from './lib/SafetyPanel.svelte';
   import AutoDrainPanel from './lib/AutoDrainPanel.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
-  import { getAPIToken, setAPIToken } from './lib/auth';
+  import { getAPIToken, isLoopbackPage, setAPIToken } from './lib/auth';
   import {
     abs,
     fmtEstimatedRuntime,
@@ -165,15 +165,22 @@
 
     {#if capabilities?.auth_enabled}
       <section class="rounded-2xl border border-line bg-card px-4 py-3 text-sm">
-        <p class="font-medium text-snow">API token required for settings changes</p>
+        <p class="font-medium text-snow">Token setup</p>
         <p class="mt-1 text-mist">
-          Paste the token from <span class="font-mono">lapguard auth generate</span>. It is kept in session storage only (not a cookie). GET telemetry stays readable without it.
+          {#if isLoopbackPage()}
+            This browser is on loopback, so settings save without a token. Paste a token only if you will use Tailscale or another remote client.
+          {:else}
+            Remote access: PUT/POST need a Bearer token. GET telemetry stays readable without one.
+          {/if}
+          Check <span class="font-mono">GET /api/v1/auth/status</span> (never returns the secret) or
+          <span class="font-mono">lapguard auth status</span>. The plaintext token is printed once at first start or by
+          <span class="font-mono">lapguard auth rotate</span>. Store it in a password manager.
         </p>
         <input
           class="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
           type="password"
           autocomplete="off"
-          placeholder="Bearer token"
+          placeholder={isLoopbackPage() ? 'Optional Bearer token for remote API calls' : 'Bearer token'}
           bind:value={apiToken}
           oninput={() => setAPIToken(apiToken)}
         />

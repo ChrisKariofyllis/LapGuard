@@ -91,7 +91,7 @@ func TestManualActionGates(t *testing.T) {
 				enableManualReady(t, srv)
 				tokenFor(t, srv)
 				armHostState(srv, power.SourceBattery, "Discharging", 40)
-				return jsonRequest(http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`)
+				return remoteJSONRequest(http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`)
 			},
 		},
 		{

@@ -67,6 +67,19 @@ func run(args []string) error {
 		log.Warn("listen address is not loopback; remote access should go through Tailscale, not a public bind")
 	}
 
+	token, minted, err := cfg.EnsureAuthToken(time.Now().UTC())
+	if err != nil {
+		return err
+	}
+	if minted {
+		printTokenOnce(os.Stdout, os.Stderr, token, "generated")
+		if cfg.ConfigPath != "" {
+			if err := cfg.Save(cfg.ConfigPath); err != nil {
+				log.Warn("could not persist generated API token hash", "path", cfg.SafeConfigPath(), "err", err)
+			}
+		}
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

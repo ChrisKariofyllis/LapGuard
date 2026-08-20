@@ -38,8 +38,11 @@ func TestPublicAlphaContract(t *testing.T) {
 	if !view.Safety.DryRun {
 		t.Fatal("config safety.dry_run")
 	}
-	if view.AuthEnabled || view.TokenConfigured {
-		t.Fatal("auth must default off")
+	if !view.AuthEnabled || view.TokenConfigured {
+		t.Fatal("auth must default on without a stored token hash")
+	}
+	if !view.AllowLoopbackNoToken {
+		t.Fatal("allow_loopback_no_token must default true")
 	}
 	if strings.Contains(viewRec.Body.String(), "token_hash") || strings.Contains(viewRec.Body.String(), "webhook_url\":\"http") {
 		t.Fatalf("config leaked secret: %s", viewRec.Body.String())
@@ -120,7 +123,7 @@ func TestPublicAlphaContract(t *testing.T) {
 	token := enableAuth(t, srv)
 	h = srv.Handler()
 	unauth := httptest.NewRecorder()
-	h.ServeHTTP(unauth, jsonRequest(http.MethodPost, "/api/v1/actions/preview", `{}`))
+	h.ServeHTTP(unauth, remoteJSONRequest(http.MethodPost, "/api/v1/actions/preview", `{}`))
 	assertUnauthorized(t, unauth)
 
 	getTel := httptest.NewRecorder()

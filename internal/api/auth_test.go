@@ -15,6 +15,56 @@ import (
 	"lapguard/internal/storage"
 )
 
+func TestAuthDefaultOnLoopbackAllowsWriteWithoutToken(t *testing.T) {
+	srv := newConfigServer(t, nil)
+	if !srv.currentConfig().Auth.Enabled || !srv.currentConfig().Auth.AllowLoopbackNoToken {
+		t.Fatalf("defaults %+v", srv.currentConfig().Auth)
+	}
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, jsonRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("loopback PUT %d body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRemoteWriteRequiresTokenWhenAuthEnabled(t *testing.T) {
+	srv := newConfigServer(t, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, remoteJSONRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`))
+	assertUnauthorized(t, rec)
+
+	token := enableAuth(t, srv)
+	ok := remoteJSONRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":22,"critical_threshold":8}}`)
+	ok.Header.Set("Authorization", "Bearer "+token)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, ok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("authed remote PUT %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestLoopbackDetectionHostAndPeer(t *testing.T) {
+	cases := []struct {
+		name, host, remote string
+		want               bool
+	}{
+		{"ipv4", "127.0.0.1:8585", "127.0.0.1:9", true},
+		{"localhost", "localhost:8585", "127.0.0.1:9", true},
+		{"ipv6", "[::1]:8585", "[::1]:9", true},
+		{"tailscale host from loopback peer", "example.ts.net", "127.0.0.1:9", false},
+		{"spoofed host from remote", "127.0.0.1:8585", "192.0.2.10:4444", false},
+		{"remote", "example.ts.net", "192.0.2.10:4444", false},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/config", nil)
+		req.Host = tc.host
+		req.RemoteAddr = tc.remote
+		if got := isLoopback(req); got != tc.want {
+			t.Fatalf("%s: isLoopback=%t want %t", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestAuthDisabledPreservesLocalDevelopment(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	rec := httptest.NewRecorder()
@@ -34,13 +84,13 @@ func TestAuthMissingAndInvalidToken401(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	token := enableAuth(t, srv)
 
-	missing := jsonRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
+	missing := remoteJSONRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, missing)
 	assertUnauthorized(t, rec)
 	missingBody := rec.Body.String()
 
-	invalid := jsonRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
+	invalid := remoteJSONRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
 	invalid.Header.Set("Authorization", "Bearer definitely-not-"+token)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, invalid)
@@ -49,7 +99,7 @@ func TestAuthMissingAndInvalidToken401(t *testing.T) {
 		t.Fatalf("missing vs invalid must use the same body:\n%s\n%s", missingBody, rec.Body.String())
 	}
 
-	valid := jsonRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
+	valid := remoteJSONRequest(http.MethodPut, "/api/v1/config", `{"shutdown":{"warning_threshold":21,"critical_threshold":9}}`)
 	valid.Header.Set("Authorization", "Bearer "+token)
 	rec = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, valid)
@@ -77,7 +127,7 @@ func TestProtectedPOSTAndPUT(t *testing.T) {
 	}
 	for _, tc := range paths {
 		rec := httptest.NewRecorder()
-		srv.Handler().ServeHTTP(rec, jsonRequest(tc.method, tc.path, tc.body))
+		srv.Handler().ServeHTTP(rec, remoteJSONRequest(tc.method, tc.path, tc.body))
 		if rec.Code != http.StatusUnauthorized {
 			t.Fatalf("%s %s status %d, want 401", tc.method, tc.path, rec.Code)
 		}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchActionStatus, fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
-  import type { ActionsConfig, AppConfig, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
+  import { fetchActionStatus, fetchAuthStatus, fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
+  import type { ActionsConfig, AppConfig, AuthStatus, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
 
   let loading = $state(true);
   let saving = $state(false);
@@ -14,6 +14,7 @@
   let notes = $state<string[]>([]);
   let execution = $state('unconfigured');
   let hostExecution = $state('disabled');
+  let authStatus = $state<AuthStatus | null>(null);
   let webhookConfigured = $state(false);
   let chatConfigured = $state(false);
   let powerSource = $state<'AC' | 'BATTERY' | 'UNKNOWN'>('UNKNOWN');
@@ -150,8 +151,14 @@
   async function load() {
     loading = true;
     try {
-      const [cfg, power, status] = await Promise.all([fetchConfig(), fetchPower(), fetchActionStatus()]);
+      const [cfg, power, status, auth] = await Promise.all([
+        fetchConfig(),
+        fetchPower(),
+        fetchActionStatus(),
+        fetchAuthStatus(),
+      ]);
       applyView(cfg);
+      authStatus = auth;
       powerSource = power.source;
       discharging = status.discharging;
       cooldownActive = Boolean(status.cooldown?.active || status.cooldown?.in_progress);
@@ -299,6 +306,26 @@
       {/each}
     </ul>
   {/if}
+
+  <div class="mt-4 rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <h3 class="text-sm font-medium">Token setup</h3>
+    <p class="mt-1 text-xs text-mist">
+      Auth is on by default. Loopback dashboard saves work without a token.
+      Tailscale and other remote PUT/POST need <span class="font-mono">Authorization: Bearer</span>.
+      GET routes stay public for monitoring.
+      <span class="font-mono">GET /api/v1/auth/status</span> reports flags only — never the token or hash.
+    </p>
+    <dl class="mt-2 grid grid-cols-2 gap-2 font-mono text-[11px] text-mist">
+      <div>auth_enabled: {String(authStatus?.auth_enabled ?? '—')}</div>
+      <div>token_configured: {String(authStatus?.token_configured ?? '—')}</div>
+      <div>allow_loopback_no_token: {String(authStatus?.allow_loopback_no_token ?? '—')}</div>
+      <div>protect_get: {String(authStatus?.protect_get ?? false)}</div>
+    </dl>
+    <p class="mt-2 text-[11px] text-amber">
+      Mint or recover the secret on the laptop with <span class="font-mono">lapguard auth rotate</span>.
+      Store it in a password manager. Do not put it in a unit file, gist, or ntfy URL.
+    </p>
+  </div>
 
   <div class="mt-4 grid gap-4">
     <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">

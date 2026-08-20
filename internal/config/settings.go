@@ -93,18 +93,19 @@ type ExecutionStatus struct {
 
 // APIConfig is the HTTP view of user-managed settings.
 type APIConfig struct {
-	Notifications   NotificationsView `json:"notifications"`
-	Shutdown        ShutdownConfig    `json:"shutdown"`
-	Docker          DockerConfig      `json:"docker"`
-	Safety          SafetyConfig      `json:"safety"`
-	AutoDrain       AutoDrainConfig   `json:"auto_drain"`
-	AuthEnabled     bool              `json:"auth_enabled"`
-	TokenConfigured bool              `json:"token_configured"`
-	TokenCreatedAt  string            `json:"token_created_at,omitempty"`
-	LastRotatedAt   string            `json:"last_rotated_at,omitempty"`
-	Actions         ActionsView       `json:"actions"`
-	Execution       ExecutionStatus   `json:"execution"`
-	Notes           []string          `json:"notes,omitempty"`
+	Notifications        NotificationsView `json:"notifications"`
+	Shutdown             ShutdownConfig    `json:"shutdown"`
+	Docker               DockerConfig      `json:"docker"`
+	Safety               SafetyConfig      `json:"safety"`
+	AutoDrain            AutoDrainConfig   `json:"auto_drain"`
+	AuthEnabled          bool              `json:"auth_enabled"`
+	TokenConfigured      bool              `json:"token_configured"`
+	AllowLoopbackNoToken bool              `json:"allow_loopback_no_token"`
+	TokenCreatedAt       string            `json:"token_created_at,omitempty"`
+	LastRotatedAt        string            `json:"last_rotated_at,omitempty"`
+	Actions              ActionsView       `json:"actions"`
+	Execution            ExecutionStatus   `json:"execution"`
+	Notes                []string          `json:"notes,omitempty"`
 }
 
 func DefaultNotifications() NotificationsConfig {
@@ -154,16 +155,17 @@ func (c Config) APIView() APIConfig {
 	view := c.Auth.View()
 	hostExec := c.hostExecutionState()
 	return APIConfig{
-		Notifications:   c.Notifications.Public(),
-		Shutdown:        c.Shutdown,
-		Docker:          c.Docker,
-		Safety:          c.Safety,
-		AutoDrain:       c.AutoDrain,
-		AuthEnabled:     view.AuthEnabled,
-		TokenConfigured: view.TokenConfigured,
-		TokenCreatedAt:  view.TokenCreatedAt,
-		LastRotatedAt:   view.LastRotatedAt,
-		Actions:         c.Actions.View(c.IntendedPlan(), c.ActionGates(), c.ManualActionsReady()),
+		Notifications:        c.Notifications.Public(),
+		Shutdown:             c.Shutdown,
+		Docker:               c.Docker,
+		Safety:               c.Safety,
+		AutoDrain:            c.AutoDrain,
+		AuthEnabled:          view.AuthEnabled,
+		TokenConfigured:      view.TokenConfigured,
+		AllowLoopbackNoToken: view.AllowLoopbackNoToken,
+		TokenCreatedAt:       view.TokenCreatedAt,
+		LastRotatedAt:        view.LastRotatedAt,
+		Actions:              c.Actions.View(c.IntendedPlan(), c.ActionGates(), c.ManualActionsReady()),
 		Execution: ExecutionStatus{
 			Notifications: c.Notifications.ExecutionState(),
 			Shutdown:      hostExec,
@@ -174,7 +176,7 @@ func (c Config) APIView() APIConfig {
 			"Automatic low-battery shutdown is not executed by the safety controller. The safety controller remains a recorder.",
 			"Smart automatic drain is experimental and off by default. It never runs without a notification, and host commands still require docker.stop_enabled, safety.dry_run=false, and actions.real_enabled=true.",
 			"Manual Docker drain and poweroff are experimental, disabled by default, and require actions.real_enabled=true, safety.dry_run=false, and explicit confirmation. Do not enable them on an important machine.",
-			"GET telemetry, capabilities, discover, power, events, safety, auto-drain/status, healthz, auth/status, actions/status, and actions/preflight stay readable without a token in this alpha. POST/PUT require a Bearer token when auth.enabled is true.",
+			"GET telemetry, capabilities, discover, power, events, safety, auto-drain/status, healthz, auth/status, actions/status, and actions/preflight stay readable without a token. Auth is on by default: loopback PUT/POST may omit the Bearer token; remote (Tailscale) PUT/POST require Authorization. GET /api/v1/auth/status never returns the token.",
 			DiskEditRestartMessage,
 		},
 	}

@@ -59,16 +59,17 @@ LAPGUARD_URL=http://127.0.0.1:8585 LAPGUARD_TOKEN='…' sh scripts/smoke-test.sh
 
 ### Authentication
 
-Auth is **off** by default so localhost development works. Enable it before
-Tailscale Serve.
+Auth is **on by default**. Loopback PUT/POST may omit the token. Remote
+(Tailscale) PUT/POST need Bearer. GET stays readable. See [security.md](security.md).
 
-- [ ] `lapguard auth generate` prints a token **once**
+- [ ] First start printed a token **once**, or `lapguard auth rotate` did
 - [ ] Store the token in a password manager (not in the unit file or a gist)
-- [ ] `lapguard auth status` shows enabled; `config.json` mode `0600` holds a hash only
+- [ ] `lapguard auth status` shows `auth_enabled=true`; `config.json` mode `0600` holds a hash only
+- [ ] `GET /api/v1/auth/status` shows flags and **never** the token or `token_hash`
 - [ ] `GET /api/v1/telemetry` still works **without** a token
-- [ ] `POST /api/v1/actions/preview` without `Authorization: Bearer` returns **401**
+- [ ] From loopback, `POST /api/v1/actions/preview` without Bearer succeeds
+- [ ] From Tailscale / a non-loopback Host, the same POST without Bearer returns **401**
 - [ ] The same POST with a valid Bearer token succeeds
-- [ ] HTTP `GET /api/v1/config` and `GET /api/v1/auth/status` never show the token or `token_hash`
 
 ### Tailscale Serve
 

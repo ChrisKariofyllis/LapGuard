@@ -111,6 +111,7 @@ export type Capabilities = {
   auth_enabled?: boolean;
   auth_warning?: string;
   protect_get?: boolean;
+  allow_loopback_no_token?: boolean;
 };
 
 export type NotificationProvider = 'none' | 'ntfy' | 'telegram' | 'discord' | 'webhook';
@@ -146,6 +147,15 @@ export type ActionsConfig = {
   ready: boolean;
 };
 
+export type AuthStatus = {
+  auth_enabled: boolean;
+  token_configured: boolean;
+  allow_loopback_no_token: boolean;
+  token_created_at?: string;
+  last_rotated_at?: string;
+  protect_get?: boolean;
+};
+
 export type AppConfig = {
   notifications: NotificationsConfig;
   shutdown: ShutdownConfig;
@@ -155,6 +165,7 @@ export type AppConfig = {
   actions?: ActionsConfig;
   auth_enabled?: boolean;
   token_configured?: boolean;
+  allow_loopback_no_token?: boolean;
   token_created_at?: string;
   last_rotated_at?: string;
   execution: {

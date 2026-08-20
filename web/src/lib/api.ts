@@ -1,4 +1,4 @@
-import type { ActionPreflight, ActionResult, ActionStatus, AppConfig, AutoDrainConfig, AutoDrainStatus, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
+import type { ActionPreflight, ActionResult, ActionStatus, AppConfig, AutoDrainConfig, AutoDrainStatus, AuthStatus, Capabilities, DiscoverReport, DockerConfig, EventsResponse, NotificationsConfig, PowerStatus, SafetyStatus, SafetyTestResult, ShutdownConfig, Telemetry } from './types';
 import { authHeaders } from './auth';
 
 async function readError(path: string, res: Response): Promise<string> {
@@ -57,6 +57,10 @@ export function fetchDiscover(signal?: AbortSignal): Promise<DiscoverReport> {
 
 export function fetchConfig(signal?: AbortSignal): Promise<AppConfig> {
   return getJSON<AppConfig>('/api/v1/config', signal);
+}
+
+export function fetchAuthStatus(signal?: AbortSignal): Promise<AuthStatus> {
+  return getJSON<AuthStatus>('/api/v1/auth/status', signal);
 }
 
 export function putConfig(body: {

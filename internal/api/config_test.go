@@ -52,6 +52,15 @@ func TestGetConfig(t *testing.T) {
 	if body.AutoDrain.Enabled {
 		t.Fatal("auto_drain must default off")
 	}
+	if !body.AuthEnabled {
+		t.Fatal("auth must default on")
+	}
+	if !body.AllowLoopbackNoToken {
+		t.Fatal("allow_loopback_no_token must default true")
+	}
+	if body.TokenConfigured {
+		t.Fatal("no token hash until minted")
+	}
 	if body.Execution.Notifications != config.ExecutionUnconfigured {
 		t.Fatalf("notifications execution %+v", body.Execution)
 	}

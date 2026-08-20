@@ -462,10 +462,10 @@ func TestAuthRequiredForActionEndpoints(t *testing.T) {
 	srv := newConfigServer(t, nil)
 	enableAuth(t, srv)
 	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`))
+	srv.Handler().ServeHTTP(rec, remoteJSONRequest(http.MethodPost, "/api/v1/actions/poweroff", `{"confirm":"POWER_OFF"}`))
 	assertUnauthorized(t, rec)
 	rec = httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, jsonRequest(http.MethodPost, "/api/v1/actions/docker-drain", `{"confirm":"STOP_DOCKER"}`))
+	srv.Handler().ServeHTTP(rec, remoteJSONRequest(http.MethodPost, "/api/v1/actions/docker-drain", `{"confirm":"STOP_DOCKER"}`))
 	assertUnauthorized(t, rec)
 }
 

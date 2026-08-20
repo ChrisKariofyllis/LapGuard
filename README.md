@@ -13,8 +13,9 @@ Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
 **This is an open-source alpha.** Treat it as experimental software.
 
 - APIs, config keys, and systemd paths may still change.
-- There is **no authentication** on the HTTP API unless you enable an optional Bearer token (`lapguard auth generate`).
-- GET telemetry stays readable without a token in this alpha; POST/PUT require the token when auth is enabled.
+- There is **no authentication** on GET telemetry. PUT/POST from a remote
+  client require a Bearer token by default; loopback may omit it.
+  See [docs/security.md](docs/security.md).
 - Charge-threshold **writes are not wired** (helpers exist, daemon never calls them).
 - CI and tests do **not** require a battery, Docker, root, or TLP.
 
@@ -66,7 +67,7 @@ There is no UPS integration and no root escalation.
 
 ### v0.9.3-alpha limitations
 
-- Optional Bearer auth; GET routes stay readable when auth is on.
+- Bearer auth on by default; loopback PUT/POST may omit the token; GET stays readable.
 - Charge-threshold **writes are not wired**.
 - Automatic low-battery shutdown is **not implemented**.
 - Manual Docker drain and poweroff exist but stay **disabled** (`real_enabled=false`, `dry_run=true`).
@@ -92,7 +93,8 @@ Public alpha testers: follow [docs/alpha-testing.md](docs/alpha-testing.md)
 - Battery safety state machine with simulate-warning / simulate-critical
 - Experimental manual Docker drain and host poweroff, **disabled by default**
 - Svelte dashboard for telemetry, capabilities, power events, config, and safety
-- Optional Bearer API token (`lapguard auth generate`) protecting POST/PUT routes
+- Optional Bearer API token (on by default). Loopback PUT/POST may omit it;
+  remote/Tailscale PUT/POST require `Authorization: Bearer`
 - Loopback bind; remote access is meant to go through Tailscale Serve or SSH, not a public listen address
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for tested machines. The production
@@ -272,21 +274,18 @@ lapguard tailscale check --pretty
 
 ### Security
 
-When `auth.enabled` is **false** (the default), LapGuard has **no application-level
-authentication**. Anyone who can reach the HTTP port can change settings.
-Enable a Bearer token before exposing the dashboard over Tailscale:
+Auth is **on by default**. Loopback PUT/POST may omit the Bearer token so the
+dashboard on `http://127.0.0.1:8585` keeps working. Remote clients (including
+Tailscale Serve) must send `Authorization: Bearer`. GET routes stay readable
+without a token.
+
+On first start with no `token_hash`, LapGuard prints a token **once**. Store it
+in a password manager. Confirm flags with `GET /api/v1/auth/status` (never the
+secret) or `lapguard auth status`. Details: [docs/security.md](docs/security.md).
 
 ```bash
-lapguard auth generate
+lapguard auth rotate
 ```
-
-Store the printed token in a password manager. It is shown once. Only a
-SHA-256 hash is written to `config.json` (mode `0600`). Send it as
-`Authorization: Bearer <token>` on POST/PUT. Do not put tokens in URLs.
-
-GET telemetry, capabilities, discover, power, events, safety, healthz,
-config, auth/status, actions/status, and actions/preflight stay readable
-without a token in this alpha. Protecting GET is reserved for a later release.
 
 With Tailscale Serve, **Tailscale identity/ACLs plus the API token** are
 the security boundary. Only trusted tailnet users/devices should be allowed.
@@ -294,13 +293,14 @@ Do not use Funnel or expose port 8585 publicly.
 
 If you lose the token, on the laptop run `lapguard auth rotate` or
 `lapguard auth disable` (these edit the local config file; they do not need
-the old token). Then generate a new one.
+the old token).
 
 ## Security limitations
 
-- **Optional Bearer authentication.** Default is off for local development.
-  When enabled, POST/PUT require `Authorization: Bearer`. GET telemetry remains
-  readable. See [Remote access](#remote-access-tailscale-serve).
+- **Bearer authentication is on by default**, with loopback PUT/POST allowed
+  without a token (`allow_loopback_no_token=true`). Remote PUT/POST need
+  `Authorization: Bearer`. GET telemetry remains readable. See
+  [docs/security.md](docs/security.md) and [Remote access](#remote-access-tailscale-serve).
 - Secrets in `config.json` (token hashes, webhook URLs, bot tokens, chat IDs)
   are stored mode `0600` and are **redacted** from API responses and logs.
   The plaintext API token is never stored or returned by HTTP. Never commit
@@ -461,7 +461,7 @@ daemon never calls those helpers and the HTTP API has no write endpoint.
 | PUT | `/api/v1/auto-drain/config` | Persist auto-drain settings (auth when enabled) |
 | POST | `/api/v1/auto-drain/respond` | `{"action":"yes"}` or `{"action":"no"}` (auth when enabled) |
 | GET | `/api/v1/healthz` | Liveness: `status`, `app`, `version`, `auth_enabled` |
-| GET | `/api/v1/auth/status` | `auth_enabled`, `token_configured`, timestamps (never the token or hash) |
+| GET | `/api/v1/auth/status` | `auth_enabled`, `token_configured`, `allow_loopback_no_token` (never the token or hash) |
 | POST | `/api/v1/auth/rotate` | Instructs you to use `lapguard auth rotate` (HTTP never returns a new token) |
 | POST | `/api/v1/auth/disable` | Disable auth (Bearer required if enabled; loopback-only if disabled) |
 
@@ -473,8 +473,8 @@ paths, or secrets. Home directories in `config.path` are shown as `~`.
 `GET /api/v1/actions/preflight` is the same runtime snapshot plus an
 explanation that on-disk `config.json` edits require a restart.
 `execution.shutdown` and `execution.docker` are `disabled`
-by default. When `auth.enabled` is true, POST/PUT need `Authorization: Bearer`.
-GET routes listed above stay readable.
+by default. Auth is on by default: loopback PUT/POST may omit the Bearer token;
+remote PUT/POST need `Authorization: Bearer`. GET routes listed above stay readable.
 
 Manual poweroff and Docker drain are **not** production-ready. The safety
 controller still does **not** execute automatic low-battery shutdown. Optional

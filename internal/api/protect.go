@@ -49,7 +49,7 @@ func (s *Server) secureAuthAdmin(h http.HandlerFunc) http.HandlerFunc {
 			if !s.requireAuth(w, r) {
 				return
 			}
-		} else if !isLocalConsole(r) {
+		} else if !isLoopback(r) {
 			s.rejectUnauthorized(w, r)
 			return
 		}
@@ -102,16 +102,30 @@ func (s *Server) requireJSON(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) bool {
-	cfg := s.currentConfig().Auth
-	if !cfg.Enabled {
-		return true
-	}
-	token, ok := bearerToken(r)
-	if !ok || !cfg.VerifyToken(token) {
+	if hasQueryToken(r) {
 		s.rejectUnauthorized(w, r)
 		return false
 	}
-	return true
+	cfg := s.currentConfig().Auth
+	token, hasBearer := bearerToken(r)
+	if hasBearer {
+		if cfg.Enabled && cfg.VerifyToken(token) {
+			return true
+		}
+		if cfg.Enabled {
+			s.rejectUnauthorized(w, r)
+			return false
+		}
+		return true
+	}
+	if !cfg.Enabled {
+		return true
+	}
+	if cfg.AllowLoopbackNoToken && isLoopback(r) {
+		return true
+	}
+	s.rejectUnauthorized(w, r)
+	return false
 }
 
 func (s *Server) rejectUnauthorized(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +134,12 @@ func (s *Server) rejectUnauthorized(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusUnauthorized, map[string]string{"error": unauthorizedMessage})
 }
 
+func hasQueryToken(r *http.Request) bool {
+	return r.URL.Query().Get("token") != "" || r.URL.Query().Get("access_token") != ""
+}
+
 func bearerToken(r *http.Request) (string, bool) {
-	if r.URL.Query().Get("token") != "" || r.URL.Query().Get("access_token") != "" {
+	if hasQueryToken(r) {
 		return "", false
 	}
 	h := r.Header.Values("Authorization")
@@ -141,7 +159,7 @@ func bearerToken(r *http.Request) (string, bool) {
 }
 
 func isLocalConsole(r *http.Request) bool {
-	return remoteIsLoopback(r.RemoteAddr) && hostIsLoopback(r.Host)
+	return isLoopback(r)
 }
 
 func remoteIsLoopback(remote string) bool {
