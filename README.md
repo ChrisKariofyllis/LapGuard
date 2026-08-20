@@ -1,18 +1,21 @@
 # LapGuard
 
 [![CI](https://github.com/ChrisKariofyllis/LapGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/ChrisKariofyllis/LapGuard/actions/workflows/ci.yml)
-[![Latest Alpha Release](https://img.shields.io/github/v/release/ChrisKariofyllis/LapGuard?include_prereleases&label=latest%20alpha)](https://github.com/ChrisKariofyllis/LapGuard/releases)
+[![Latest Beta Release](https://img.shields.io/github/v/release/ChrisKariofyllis/LapGuard?include_prereleases&label=latest%20beta)](https://github.com/ChrisKariofyllis/LapGuard/releases)
 [![License](https://img.shields.io/github/license/ChrisKariofyllis/LapGuard)](https://github.com/ChrisKariofyllis/LapGuard/blob/main/LICENSE)
 
 Lightweight Linux laptop power manager for machines that stay on as 24/7 home servers.
 
-Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
+Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**. Current release: **v1.0-beta**.
 
-## Alpha warning
+![LapGuard dashboard](docs/images/lapguard-dashboard.png)
 
-**This is an open-source alpha.** Treat it as experimental software.
+## Beta notice
 
-- APIs, config keys, and systemd paths may still change.
+**This is an open-source beta.** Treat it as experimental software that is
+approaching a stable v1.0, not a finished production product.
+
+- APIs, config keys, and systemd paths may still change before v1.0 stable.
 - There is **no authentication** on GET telemetry. PUT/POST from a remote
   client require a Bearer token by default; loopback may omit it.
   See [docs/security.md](docs/security.md).
@@ -21,7 +24,7 @@ Go API + Svelte dashboard. Default bind: **`127.0.0.1:8585`**.
 
 ### Real actions are experimental and disabled by default
 
-**Do not enable real actions on an important machine.** This alpha remains
+**Do not enable real actions on an important machine.** This beta remains
 dry-run unless you explicitly change both `actions.real_enabled` and
 `safety.dry_run`.
 
@@ -52,9 +55,9 @@ after the gates pass, because OS permission to power off or talk to Docker
 is outside this project. Real Docker drain and host poweroff are **not**
 safe for production yet.
 
-> **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. The current alpha stays dry-run unless you change that configuration yourself.
+> **Warning:** Real Docker drain and host poweroff are experimental and off by default. Do not enable them on a machine you care about. This beta stays dry-run unless you change that configuration yourself.
 
-### v0.9.5-alpha smart automatic drain
+### Smart automatic drain
 
 Optional `auto_drain` can warn on ntfy (or another configured provider) when the
 pack is at or below a threshold (default 10%) while discharging, then wait for
@@ -65,7 +68,7 @@ starts without a successful notification. Host commands still need
 ntfy cannot POST back to `127.0.0.1`; do not put Bearer tokens in ntfy action URLs.
 There is no UPS integration and no root escalation.
 
-### v0.9.3-alpha limitations
+### Beta limitations
 
 - Bearer auth on by default; loopback PUT/POST may omit the token; GET stays readable.
 - Charge-threshold **writes are not wired**.
@@ -75,8 +78,9 @@ There is no UPS integration and no root escalation.
 - Not production-safe; no sudoers/polkit; no UPS support. OS poweroff permission is
   external — a normal user may see HTTP 503 after the software gates pass.
 
-Public alpha testers: follow [docs/alpha-testing.md](docs/alpha-testing.md)
-(`make smoke` never enables real actions).
+Public testers: follow [docs/alpha-testing.md](docs/alpha-testing.md)
+(`make smoke` never enables real actions). The v1.0-beta checklist is the same
+safety contract; version strings in that file may still say alpha.
 
 ## Current features
 
@@ -106,6 +110,21 @@ power, charge-threshold method `none`).
 Tagging `v*` builds **linux-amd64** and **linux-arm64** binaries with the
 dashboard embedded and `SHA256SUMS`. The workflow **does not publish** the
 GitHub Release; a maintainer must publish the draft by hand.
+
+Quick user-space install (review the script, then run it — not `curl | sudo bash`):
+
+```bash
+# from a clone of this repo
+sh docs/install-quick.sh            # newest GitHub release
+sh docs/install-quick.sh 1.0-beta   # pin v1.0-beta
+```
+
+The helper verifies `SHA256SUMS`, installs to `~/.local/bin`, writes a new
+config only if none exists, and installs the user systemd unit. It does not
+start the service or enable real actions. Details:
+[docs/install.md](docs/install.md), [docs/install-quick.sh](docs/install-quick.sh).
+
+Manual steps:
 
 1. Download `lapguard_<version>_linux-amd64` (or `linux-arm64`) and `SHA256SUMS`
    from a published [GitHub Release](https://github.com/ChrisKariofyllis/LapGuard/releases).
@@ -310,7 +329,7 @@ the old token).
 - Discovery reports hostname, kernel, and battery model on the HTTP API.
   Use `lapguard discover --report` (not raw API JSON) when sharing a
   compatibility report.
-- The process should not run as root for alpha. The systemd templates do
+- The process should not run as root for this beta. The systemd templates do
   not grant sudo or `CAP_SYS_BOOT`. LapGuard does not install sudoers or
   polkit rules. After every software gate passes, `systemctl poweroff` /
   `poweroff` still need OS permission; without it the API returns **503**.
@@ -502,7 +521,15 @@ internal/config/             # flags + atomic config.json (mode 0600)
 contrib/systemd/             # user and system unit templates
 testdata/sysfs/BAT0/
 web/
+docs/images/                 # README dashboard screenshot
 ```
+
+## v2.0 UI
+
+v1.0-beta ships the current Svelte dashboard (screenshot above). A **v2.0 UI**
+pass is planned separately: layout, theming, and operator flow — not a rewrite
+of the Go API or safety gates. Track that work after the v1.0 stable API freeze
+in [docs/roadmap-to-v1.0.md](docs/roadmap-to-v1.0.md).
 
 ## License
 
