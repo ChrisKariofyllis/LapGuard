@@ -1,0 +1,23 @@
+---
+description: LapGuard v2.0 UI — read awesome-design-md DESIGN.md references before generating interface
+globs: web/**/*.svelte,web/**/*.css,web/**/*.ts,web/**/*.html
+alwaysApply: false
+---
+
+# UI Design Reference
+
+When designing the LapGuard v2.0 UI, reference:
+`/home/laptop/.cursor/reference/awesome-design-md/`
+
+This repo contains DESIGN.md files (Google Stitch format) extracted from real product sites: color tokens, typography, components, layout, elevation, and do/don't rules.
+
+## How to use
+
+1. Do not copy a brand wholesale. Pick 1–2 closest systems and adapt tokens to LapGuard (battery/ops dashboard, loopback-first, safety-critical actions).
+2. Read the chosen `design-md/<brand>/DESIGN.md` before generating UI.
+3. Strong starting points for this product:
+   - `linear.app` — dense, technical, dark, single accent
+   - `posthog` / `sentry` — data-dense operator dashboards
+   - `warp` / `supabase` — dark developer-tool chrome
+   - `ibm` — structured enterprise system (Carbon-like)
+4. Keep existing LapGuard safety UX: dry-run defaults, confirmation gates, no decorative danger.

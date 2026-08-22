@@ -62,11 +62,11 @@
   });
 </script>
 
-<section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+<section class="lg-card">
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
-      <h2 class="text-sm font-medium">Safety controller</h2>
-      <p class="mt-1 text-xs text-mist">Monitors battery percent while discharging. Automatic host commands are not executed.</p>
+      <h2 class="text-[22px] font-medium tracking-tight">Safety controller</h2>
+      <p class="mt-1 text-sm text-mist">Monitors battery percent while discharging. Automatic host commands are not executed.</p>
     </div>
     <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">
       {safety?.dry_run === false ? 'Automatic dry-run' : 'Dry-run'}
@@ -74,7 +74,7 @@
   </div>
 
   <p class="mt-3 rounded-xl border border-amber/40 bg-amber/10 px-3 py-2 text-sm text-amber">
-    Automatic shutdown is not executed in this alpha. Real actions stay disabled unless explicitly enabled.
+    Automatic shutdown is not executed in this beta. Real actions stay disabled unless explicitly enabled.
   </p>
 
   {#if error}
@@ -85,18 +85,18 @@
   {/if}
 
   <div class="mt-4 grid gap-3 sm:grid-cols-3">
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">State</p>
       <p class="mt-1 font-mono text-lg {stateClass}">{safety?.state ?? '—'}</p>
       {#if safety?.reason}
         <p class="mt-1 text-[11px] text-mist">{safety.reason}</p>
       {/if}
     </article>
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">Warning</p>
       <p class="mt-1 font-mono text-lg">{safety?.warning_threshold ?? '—'}%</p>
     </article>
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">Critical</p>
       <p class="mt-1 font-mono text-lg">{safety?.critical_threshold ?? '—'}%</p>
     </article>
@@ -119,7 +119,7 @@
   <div class="mt-4 flex flex-wrap gap-2">
     <button
       type="button"
-      class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+      class="lg-btn lg-btn-secondary"
       disabled={testing}
       onclick={() => void simulate('warning')}
     >
@@ -127,7 +127,7 @@
     </button>
     <button
       type="button"
-      class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+      class="lg-btn lg-btn-danger"
       disabled={testing}
       onclick={() => void simulate('critical')}
     >

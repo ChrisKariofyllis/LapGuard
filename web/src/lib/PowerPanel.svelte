@@ -86,17 +86,17 @@
   });
 </script>
 
-<section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+<section class="lg-card">
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
-      <h2 class="text-sm font-medium">Power source</h2>
-      <p class="mt-1 text-xs text-mist">
+      <h2 class="text-[22px] font-medium tracking-tight">Power source</h2>
+      <p class="mt-1 text-sm text-mist">
         Mains adapters are discovered from sysfs <span class="font-mono">type=Mains</span>. Names are not hardcoded.
       </p>
     </div>
-    <span class={`rounded-full border border-line px-3 py-1 font-mono text-[11px] uppercase tracking-wider ${sourceClass}`}>
-      {power ? sourceLabel : '…'}
-    </span>
+        <span class="lg-badge font-mono uppercase tracking-wider {sourceClass}">
+          {power ? sourceLabel : '…'}
+        </span>
   </div>
 
   {#if error}
@@ -143,7 +143,7 @@
     {:else}
       <ul class="mt-2 space-y-2">
         {#each events as event}
-          <li class="rounded-xl border border-line bg-ink-soft/50 px-3 py-2">
+          <li class="lg-card-nested">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <p class="text-sm font-medium">{formatEvent(event.type)}</p>
               <p class="font-mono text-[11px] text-mist">{formatTime(event.timestamp)}</p>

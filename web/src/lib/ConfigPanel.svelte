@@ -1,7 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchActionStatus, fetchAuthStatus, fetchConfig, fetchPower, postDockerDrain, postPowerOff, putConfig, testNotification } from './api';
+  import { getAPIToken, isLoopbackPage, setAPIToken } from './auth';
   import type { ActionsConfig, AppConfig, AuthStatus, DockerConfig, NotificationsConfig, ShutdownConfig } from './types';
+
+  let { section = 'all' }: { section?: 'all' | 'notifications' | 'settings' } = $props();
+
+  const showNotifications = $derived(section === 'all' || section === 'notifications');
+  const showSettings = $derived(section === 'all' || section === 'settings');
 
   let loading = $state(true);
   let saving = $state(false);
@@ -25,6 +31,7 @@
   let confirmText = $state('');
   let actionNotice = $state<string | null>(null);
   let actionFailed = $state(false);
+  let apiToken = $state(getAPIToken());
 
   let notifications = $state<NotificationsConfig>({
     provider: 'none',
@@ -270,11 +277,13 @@
 </script>
 
 
-<section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+<section class="lg-card">
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
-      <h2 class="text-sm font-medium">Configuration</h2>
-      <p class="mt-1 text-xs text-mist">
+      <h2 class="text-[22px] font-medium tracking-tight">
+        {section === 'notifications' ? 'Notifications' : section === 'settings' ? 'Settings' : 'Configuration'}
+      </h2>
+      <p class="mt-1 text-sm text-mist">
 		Stored in the process config file (mode 0600). Default for a user
         install is <span class="font-mono">~/.config/lapguard/config.json</span>;
         the system unit uses <span class="font-mono">/etc/lapguard/config.json</span>.
@@ -285,9 +294,9 @@
     </div>
     <button
       type="button"
-      class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+      class="lg-btn lg-btn-primary"
       onclick={() => void save()}
-      disabled={saving || loading || Boolean(thresholdHint)}
+      disabled={saving || loading || (showSettings && Boolean(thresholdHint))}
     >
       {saving ? 'Saving…' : 'Save settings'}
     </button>
@@ -299,7 +308,7 @@
   {#if notice}
     <p class="mt-3 rounded-xl border border-mint/30 bg-mint/10 px-3 py-2 text-sm text-mint">{notice}</p>
   {/if}
-  {#if notes.length}
+  {#if notes.length && showSettings}
     <ul class="mt-3 space-y-1 text-xs text-amber">
       {#each notes as note}
         <li>{note}</li>
@@ -307,7 +316,8 @@
     </ul>
   {/if}
 
-  <div class="mt-4 rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+  {#if showSettings}
+  <div class="mt-4 lg-card-nested">
     <h3 class="text-sm font-medium">Token setup</h3>
     <p class="mt-1 text-xs text-mist">
       Auth is on by default. Loopback dashboard saves work without a token.
@@ -321,14 +331,24 @@
       <div>allow_loopback_no_token: {String(authStatus?.allow_loopback_no_token ?? '—')}</div>
       <div>protect_get: {String(authStatus?.protect_get ?? false)}</div>
     </dl>
+    <input
+      class="lg-input mt-3 font-mono"
+      type="password"
+      autocomplete="off"
+      placeholder={isLoopbackPage() ? 'Optional Bearer token for remote API calls' : 'Bearer token'}
+      bind:value={apiToken}
+      oninput={() => setAPIToken(apiToken)}
+    />
     <p class="mt-2 text-[11px] text-amber">
       Mint or recover the secret on the laptop with <span class="font-mono">lapguard auth rotate</span>.
       Store it in a password manager. Do not put it in a unit file, gist, or ntfy URL.
     </p>
   </div>
+  {/if}
 
   <div class="mt-4 grid gap-4">
-    <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    {#if showNotifications}
+    <div class="lg-card-nested">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Notifications</h3>
         <span class="rounded-full px-2.5 py-0.5 font-mono text-[11px] {execution === 'ready' || execution === 'dry_run' ? 'bg-mint/15 text-mint' : 'bg-amber/15 text-amber'}">{execution}</span>
@@ -341,7 +361,7 @@
         <label class="block text-xs text-mist">
           Provider
           <select
-            class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 text-sm text-snow"
+            class="lg-select mt-1"
             bind:value={notifications.provider}
           >
             <option value="none">None</option>
@@ -365,7 +385,7 @@
           Webhook URL
           <div class="mt-1 flex gap-2">
             <input
-              class="w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
+              class="lg-input font-mono"
               type={showWebhook ? 'url' : 'password'}
               autocomplete="off"
               spellcheck="false"
@@ -374,7 +394,7 @@
             />
             <button
               type="button"
-              class="shrink-0 rounded-xl border border-line px-3 py-2 text-xs text-mist"
+              class="lg-btn lg-btn-secondary shrink-0"
               onclick={() => (showWebhook = !showWebhook)}
             >
               {showWebhook ? 'Hide' : 'Show'}
@@ -384,7 +404,7 @@
         <label class="block text-xs text-mist sm:col-span-2">
           Chat ID
           <input
-            class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
+            class="lg-input mt-1 font-mono"
             type="text"
             autocomplete="off"
             placeholder={chatConfigured ? 'Saved — enter a new chat ID to replace' : 'Telegram chat id'}
@@ -395,7 +415,7 @@
       <div class="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+          class="lg-btn lg-btn-secondary"
           disabled={testing || loading || !canTest}
           title={canTest ? 'Send a test message through the configured provider' : 'Enable notifications and configure a provider first'}
           onclick={() => void sendTest()}
@@ -407,14 +427,16 @@
         {/if}
       </div>
     </div>
+    {/if}
 
-    <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    {#if showSettings}
+    <div class="lg-card-nested">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Low-battery shutdown</h3>
         <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">{hostBadge()}</span>
       </div>
       <p class="mt-1 text-xs text-mist">
-        Thresholds are validated and persisted. Automatic low-battery shutdown is not executed in this alpha.
+        Thresholds are validated and persisted. Automatic low-battery shutdown is not executed in this beta.
         Manual poweroff is experimental, disabled by default, and requires extra gates.
       </p>
 
@@ -426,7 +448,7 @@
         <label class="block text-xs text-mist">
           Warning %
           <input
-            class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
+            class="lg-input mt-1 font-mono"
             type="number"
             min="0"
             max="100"
@@ -436,7 +458,7 @@
         <label class="block text-xs text-mist">
           Critical %
           <input
-            class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
+            class="lg-input mt-1 font-mono"
             type="number"
             min="0"
             max="100"
@@ -448,7 +470,7 @@
         <p class="mt-2 text-xs text-rose">{thresholdHint}</p>
       {/if}
 
-      <div class="mt-3 rounded-xl border border-line bg-panel/60 px-3 py-2">
+      <div class="mt-3 rounded-lg border border-line bg-ink-soft px-3 py-2">
         <p class="text-[11px] uppercase tracking-wide text-mist">Intended plan</p>
         <ul class="mt-1 space-y-0.5 text-xs text-snow">
           {#each intendedPlan as step}
@@ -463,7 +485,7 @@
 
       <button
         type="button"
-        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        class="lg-btn lg-btn-danger mt-3"
         disabled={!poweroffReady || acting}
         title={poweroffReady ? 'Requires confirmation' : 'Real actions stay disabled until every safety gate is satisfied and AC is disconnected'}
         onclick={() => openModal('poweroff')}
@@ -472,7 +494,7 @@
       </button>
     </div>
 
-    <div class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <div class="lg-card-nested">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="text-sm font-medium">Docker drain</h3>
         <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">{hostBadge()}</span>
@@ -489,7 +511,7 @@
         <label class="block text-xs text-mist">
           Timeout (seconds)
           <input
-            class="mt-1 w-full rounded-xl border border-line bg-panel px-3 py-2 font-mono text-sm text-snow"
+            class="lg-input mt-1 font-mono"
             type="number"
             min="0"
             max="3600"
@@ -499,7 +521,7 @@
       </div>
       <button
         type="button"
-        class="mt-3 rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        class="lg-btn lg-btn-danger mt-3"
         disabled={!dockerReady || acting}
         title={dockerReady ? 'Requires confirmation' : 'Real actions stay disabled until every safety gate is satisfied'}
         onclick={() => openModal('docker')}
@@ -507,12 +529,13 @@
         Stop Docker containers
       </button>
     </div>
+    {/if}
   </div>
 </section>
 
 {#if modal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-    <div class="w-full max-w-md rounded-2xl border border-line bg-panel px-4 py-4">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+    <div class="lg-card w-full max-w-md">
       <h3 class="text-sm font-medium">
         {modal === 'docker' ? 'Confirm Docker drain' : 'Confirm host poweroff'}
       </h3>
@@ -522,7 +545,7 @@
           : 'This will power off the machine. Type POWER_OFF to continue.'}
       </p>
       <input
-        class="mt-3 w-full rounded-xl border border-line bg-ink-soft px-3 py-2 font-mono text-sm text-snow"
+        class="lg-input mt-3 font-mono"
         type="text"
         autocomplete="off"
         spellcheck="false"
@@ -534,7 +557,7 @@
       <div class="mt-4 flex justify-end gap-2">
         <button
           type="button"
-          class="rounded-full border border-line px-3 py-1 text-xs text-mist"
+          class="lg-btn lg-btn-secondary"
           onclick={closeModal}
           disabled={acting}
         >
@@ -542,7 +565,7 @@
         </button>
         <button
           type="button"
-          class="rounded-full border border-rose/50 px-3 py-1 text-xs text-rose disabled:opacity-50"
+          class="lg-btn lg-btn-danger"
           disabled={acting || confirmText !== confirmWord}
           onclick={() => void confirmAction()}
         >

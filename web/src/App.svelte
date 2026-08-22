@@ -1,28 +1,42 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import ConfigPanel from './lib/ConfigPanel.svelte';
-  import PowerPanel from './lib/PowerPanel.svelte';
-  import SafetyPanel from './lib/SafetyPanel.svelte';
-  import AutoDrainPanel from './lib/AutoDrainPanel.svelte';
+  import DashboardTab from './lib/tabs/DashboardTab.svelte';
+  import SafetyTab from './lib/tabs/SafetyTab.svelte';
+  import AutoDrainTab from './lib/tabs/AutoDrainTab.svelte';
+  import NotificationsTab from './lib/tabs/NotificationsTab.svelte';
+  import SettingsTab from './lib/tabs/SettingsTab.svelte';
   import { fetchCapabilities, fetchDiscover, fetchTelemetry } from './lib/api';
   import { getAPIToken, isLoopbackPage, setAPIToken } from './lib/auth';
-  import {
-    abs,
-    fmtEstimatedRuntime,
-    fmtInt,
-    fmtNumber,
-    healthTone,
-    powerHeading as batteryPowerHeading,
-    statusLabel,
-    statusTone,
-    type StatusTone,
-  } from './lib/format';
-  import type { Capabilities, Telemetry, Tools } from './lib/types';
+  import { statusLabel, statusTone } from './lib/format';
+  import type { Capabilities, Telemetry } from './lib/types';
 
   const POLL_MS = 2000;
-  const THEME_KEY = 'lapguard-theme';
+  const TAB_KEY = 'lapguard-tab';
 
-  let dark = $state(true);
+  type TabId = 'dashboard' | 'safety' | 'auto-drain' | 'notifications' | 'settings';
+
+  const TABS: { id: TabId; label: string }[] = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'safety', label: 'Safety' },
+    { id: 'auto-drain', label: 'Auto-Drain' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'settings', label: 'Settings' },
+  ];
+
+  function parseTab(raw: string | null): TabId {
+    switch (raw) {
+      case 'safety':
+      case 'auto-drain':
+      case 'notifications':
+      case 'settings':
+      case 'dashboard':
+        return raw;
+      default:
+        return 'dashboard';
+    }
+  }
+
+  let tab = $state<TabId>('dashboard');
   let telemetry = $state<Telemetry | null>(null);
   let capabilities = $state<Capabilities | null>(null);
   let error = $state<string | null>(null);
@@ -34,25 +48,19 @@
   const present = $derived(battery?.present ?? false);
   const capacity = $derived(battery?.capacity_percent);
   const tone = $derived(statusTone(battery?.status, present));
-  const power = $derived(battery?.battery_power_w ?? abs(battery?.power_w));
-  const powerMode = $derived(battery?.power_calculation ?? capabilities?.power_calculation);
-  const derivedPower = $derived(powerMode === 'current_voltage');
-  const powerHeading = $derived(batteryPowerHeading(battery));
-  const powerDirection = $derived(battery?.power_direction);
 
-  function applyTheme(next: boolean) {
-    dark = next;
-    document.documentElement.classList.toggle('dark', next);
-    document.documentElement.style.colorScheme = next ? 'dark' : 'light';
-    localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
+  function setTab(next: TabId) {
+    tab = next;
+    sessionStorage.setItem(TAB_KEY, next);
+    const hash = `#${next}`;
+    if (window.location.hash !== hash) {
+      history.replaceState(null, '', hash);
+    }
   }
 
   async function refresh(signal?: AbortSignal) {
     try {
-      const [tel, caps] = await Promise.all([
-        fetchTelemetry(signal),
-        fetchCapabilities(signal),
-      ]);
+      const [tel, caps] = await Promise.all([fetchTelemetry(signal), fetchCapabilities(signal)]);
       telemetry = tel;
       capabilities = caps;
       error = null;
@@ -75,8 +83,15 @@
   }
 
   onMount(() => {
-    const saved = localStorage.getItem(THEME_KEY);
-    applyTheme(saved ? saved !== 'light' : true);
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = 'dark';
+
+    const fromHash = parseTab(window.location.hash.replace(/^#/, '') || null);
+    const fromStore = parseTab(sessionStorage.getItem(TAB_KEY));
+    setTab(window.location.hash ? fromHash : fromStore);
+
+    const onHash = () => setTab(parseTab(window.location.hash.replace(/^#/, '') || null));
+    window.addEventListener('hashchange', onHash);
 
     const controller = new AbortController();
     refresh(controller.signal);
@@ -87,97 +102,89 @@
     return () => {
       controller.abort();
       window.clearInterval(id);
+      window.removeEventListener('hashchange', onHash);
     };
   });
 
-  const ring = $derived.by(() => {
-    const pct = Math.max(0, Math.min(100, capacity ?? 0));
-    const radius = 88;
-    const circ = 2 * Math.PI * radius;
-    return {
-      pct,
-      radius,
-      circ,
-      dash: circ * (pct / 100),
-    };
-  });
-
-  const toneClass: Record<StatusTone, string> = {
-    charge: 'text-mint',
-    discharge: 'text-amber',
-    full: 'text-mint',
-    idle: 'text-sky',
-    missing: 'text-rose',
+  const toneDot: Record<string, string> = {
+    charge: 'bg-mint',
+    discharge: 'bg-amber',
+    full: 'bg-mint',
+    idle: 'bg-sky',
+    missing: 'bg-rose',
   };
-
-  const ringClass: Record<StatusTone, string> = {
-    charge: 'stroke-mint',
-    discharge: 'stroke-amber',
-    full: 'stroke-mint',
-    idle: 'stroke-sky',
-    missing: 'stroke-rose',
-  };
-
-  function toolChips(tools: Tools | undefined): { label: string; on: boolean }[] {
-    return [
-      { label: tools?.tlp ? `TLP ${tools.tlp_version || ''}`.trim() : 'TLP', on: Boolean(tools?.tlp) },
-      { label: 'UPower', on: Boolean(tools?.upower) },
-      { label: 'ACPI', on: Boolean(tools?.acpi) },
-      { label: 'tp-smapi', on: Boolean(tools?.tp_smapi) },
-      { label: 'i8kutils', on: Boolean(tools?.i8kutils) },
-    ];
-  }
 </script>
 
-<div class="min-h-dvh px-4 pb-10 pt-[max(1.25rem,env(safe-area-inset-top))] sm:px-6">
-  <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
-    <header class="flex items-start justify-between gap-3">
-      <div>
-        <p class="font-mono text-[11px] uppercase tracking-[0.22em] text-mist">Laptop power manager</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-snow">
-          LapGuard
-        </h1>
-        <p class="mt-1 text-sm text-mist">
-          {capabilities ? `${capabilities.version} · ${capabilities.listen}` : 'connecting…'}
-        </p>
+<div class="min-h-dvh bg-canvas text-snow">
+  <header class="lg-nav sticky top-0 z-40">
+    <div class="mx-auto flex h-full max-w-[1280px] items-center gap-3 px-4 sm:px-6">
+      <div class="flex min-w-0 shrink-0 items-center gap-2">
+        <img
+          src="/lapguard-logo.jpg"
+          alt="LapGuard"
+          class="h-7 w-7 rounded-md object-cover"
+          width="28"
+          height="28"
+        />
+        <div class="hidden leading-tight sm:block">
+          <p class="text-sm font-medium tracking-tight">LapGuard</p>
+          <p class="font-mono text-[11px] text-mist">{capabilities?.version ?? '…'}</p>
+        </div>
       </div>
-      <div class="flex items-center gap-2">
-        <span
-          class="rounded-full border border-line px-3 py-1 font-mono text-[11px] uppercase tracking-wider text-mist dark:border-line"
-        >
-          {telemetry?.provider ?? capabilities?.provider ?? '—'}
-        </span>
-        <button
-          type="button"
-          class="rounded-full border border-line px-3 py-1 text-sm text-mist transition hover:border-mist hover:text-snow"
-          onclick={() => applyTheme(!dark)}
-        >
-          {dark ? 'Light' : 'Dark'}
-        </button>
-      </div>
-    </header>
 
+      <div
+        class="flex min-w-0 flex-1 items-center justify-start overflow-x-auto sm:justify-center"
+        role="tablist"
+        aria-label="LapGuard sections"
+      >
+        {#each TABS as item}
+          <button
+            type="button"
+            class="lg-tab shrink-0"
+            role="tab"
+            id="tab-{item.id}"
+            aria-selected={tab === item.id}
+            aria-controls="panel-{item.id}"
+            tabindex={tab === item.id ? 0 : -1}
+            onclick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        {/each}
+      </div>
+
+      <div class="flex shrink-0 items-center gap-2">
+        <span class="lg-badge hidden items-center gap-1.5 font-mono sm:inline-flex">
+          <span class={`h-1.5 w-1.5 rounded-full ${toneDot[tone]}`}></span>
+          {capacity === undefined ? '—' : `${capacity}%`}
+          · {statusLabel(battery?.status, present)}
+        </span>
+        <span class="lg-badge font-mono">{telemetry?.provider ?? capabilities?.provider ?? '—'}</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6">
     {#if error}
-      <div class="rounded-2xl border border-rose/40 bg-rose/10 px-4 py-3 text-sm text-rose">
+      <div class="mb-5 rounded-xl border border-rose/40 bg-rose/10 px-4 py-3 text-sm text-rose">
         {error}. Start the Go API on 127.0.0.1:8585 if it is not running.
       </div>
     {/if}
 
-    {#if capabilities?.auth_enabled}
-      <section class="rounded-2xl border border-line bg-card px-4 py-3 text-sm">
-        <p class="font-medium text-snow">Token setup</p>
+    {#if capabilities?.auth_enabled && tab !== 'settings'}
+      <section class="lg-card mb-5 text-sm">
+        <p class="font-medium">Token setup</p>
         <p class="mt-1 text-mist">
           {#if isLoopbackPage()}
-            This browser is on loopback, so settings save without a token. Paste a token only if you will use Tailscale or another remote client.
+            This browser is on loopback, so settings save without a token. Paste a token only if you will use Tailscale or
+            another remote client.
           {:else}
             Remote access: PUT/POST need a Bearer token. GET telemetry stays readable without one.
           {/if}
-          Check <span class="font-mono">GET /api/v1/auth/status</span> (never returns the secret) or
-          <span class="font-mono">lapguard auth status</span>. The plaintext token is printed once at first start or by
-          <span class="font-mono">lapguard auth rotate</span>. Store it in a password manager.
+          Full auth flags live in Settings.
         </p>
         <input
-          class="mt-2 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
+          class="lg-input mt-2 font-mono"
           type="password"
           autocomplete="off"
           placeholder={isLoopbackPage() ? 'Optional Bearer token for remote API calls' : 'Bearer token'}
@@ -185,267 +192,38 @@
           oninput={() => setAPIToken(apiToken)}
         />
       </section>
-    {:else if capabilities?.auth_warning}
-      <p class="text-xs text-mist">{capabilities.auth_warning}</p>
+    {:else if capabilities?.auth_warning && tab !== 'settings'}
+      <p class="mb-5 text-xs text-mist">{capabilities.auth_warning}</p>
     {/if}
 
-    <section
-      class="rounded-3xl border border-line bg-panel/80 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur dark:bg-panel/80"
-    >
-      <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
-        <div class="relative grid place-items-center">
-          <svg width="220" height="220" viewBox="0 0 220 220" class="drop-shadow-sm">
-            <circle cx="110" cy="110" r={ring.radius} class="fill-none stroke-line" stroke-width="14" />
-            <circle
-              cx="110"
-              cy="110"
-              r={ring.radius}
-              class={`fill-none ${ringClass[tone]}`}
-              stroke-width="14"
-              stroke-linecap="round"
-              stroke-dasharray={`${ring.dash} ${ring.circ}`}
-              transform="rotate(-90 110 110)"
-            />
-          </svg>
-          <div class="absolute inset-0 grid place-items-center text-center">
-            <div>
-              <p class="font-mono text-5xl font-medium tracking-tight">
-                {capacity === undefined ? '—' : capacity}<span class="text-2xl text-mist">%</span>
-              </p>
-              <p class={`mt-1 text-sm font-medium ${toneClass[tone]}`}>
-                {statusLabel(battery?.status, present)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="w-full flex-1 space-y-4">
-          <div>
-            <p class="font-mono text-[11px] uppercase tracking-[0.18em] text-mist">{powerHeading}</p>
-            <p class="mt-1 font-mono text-4xl font-medium tracking-tight">
-              {fmtNumber(power, 2)}
-              <span class="text-lg text-mist">W</span>
-            </p>
-            <p class="mt-1 text-sm text-mist">
-              {#if !present}
-                No pack detected. Auto-fallback to mock is available with <span class="font-mono">--provider mock</span>.
-              {:else}
-                {#if derivedPower && powerDirection !== 'unknown'}
-                  Calculated from <span class="font-mono">current_now × voltage_now</span>.
-                {/if}
-                {#if powerDirection === 'charge'}
-                  Charging power into the battery, not total system consumption.
-                {:else if powerDirection === 'discharge'}
-                  Power drawn from the battery.
-                {:else if powerDirection === 'idle'}
-                  Pack at rest (Full / Not charging).
-                {:else}
-                  Battery-side power is unavailable.
-                {/if}
-              {/if}
-            </p>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div class="rounded-2xl border border-line bg-ink-soft/60 px-4 py-3">
-              <p class="text-xs text-mist">Health</p>
-              <p class={`mt-1 font-mono text-xl ${toneClass[healthTone(battery?.health_percent)]}`}>
-                {fmtNumber(battery?.health_percent, 1, '%')}
-              </p>
-            </div>
-            <div class="rounded-2xl border border-line bg-ink-soft/60 px-4 py-3">
-              <p class="text-xs text-mist">Cycles</p>
-              <p class="mt-1 font-mono text-xl">{fmtInt(battery?.cycle_count)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Voltage</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.voltage_now_v, 3, ' V')}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Current</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.current_now_a, 3, ' A')}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">{powerHeading}</p>
-        <p class="mt-2 font-mono text-lg">
-          {fmtNumber(power, 2, ' W')}
-        </p>
-        {#if derivedPower}
-          <p class="mt-1 text-[11px] text-mist">current_now × voltage_now</p>
-        {/if}
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Energy full</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.energy_full_wh, 1, ' Wh')}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Design full</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.energy_full_design_wh, 1, ' Wh')}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Pack</p>
-        <p class="mt-2 font-mono text-lg">{battery?.name ?? '—'}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Temperature</p>
-        <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.temperature_c, 1, ' °C')}</p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Identity</p>
-        <p class="mt-2 font-mono text-sm leading-snug">
-          {battery?.manufacturer || capabilities?.battery?.manufacturer || '—'}
-          {#if battery?.model_name || capabilities?.battery?.model}
-            <span class="text-mist"> · {battery?.model_name || capabilities?.battery?.model}</span>
-          {/if}
-        </p>
-      </article>
-      <article class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-        <p class="text-xs text-mist">Estimated time left</p>
-        <p class="mt-2 font-mono text-lg">
-          {fmtEstimatedRuntime(battery?.estimated_runtime_seconds, battery?.estimated_runtime_available)}
-        </p>
-        {#if battery?.estimated_runtime_available}
-          <p class="mt-1 text-[11px] text-mist">Based on current battery usage</p>
-        {:else}
-          <p class="mt-1 text-[11px] text-mist">
-            {battery?.estimated_runtime_reason ?? 'Available while discharging'}
-          </p>
-        {/if}
-      </article>
-    </section>
-
-    <PowerPanel />
-
-    <SafetyPanel />
-
-    <AutoDrainPanel />
-
-    <section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 class="text-sm font-medium">Capabilities</h2>
-          <p class="mt-1 text-xs text-mist">
-            Auto-discovered on this machine
-            {#if capabilities?.hostname}
-              · {capabilities.hostname}
-            {/if}
-            {#if capabilities?.os}
-              · {capabilities.os}
-            {/if}
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <p class="font-mono text-[11px] text-mist">
-            {updatedAt ? `updated ${updatedAt.toLocaleTimeString()}` : 'waiting'}
-          </p>
-          <button
-            type="button"
-            class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
-            onclick={() => void rescan()}
-            disabled={scanning}
-          >
-            {scanning ? 'Scanning…' : 'Re-scan'}
-          </button>
-        </div>
-      </div>
-
-      <div class="mt-3 flex flex-wrap gap-2 text-[11px]">
-        <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
-          thresholds: {capabilities?.threshold_method ?? '—'}
-        </span>
-        {#if capabilities?.naming_convention}
-          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
-            naming: {capabilities.naming_convention}
-          </span>
-        {/if}
-        {#if capabilities?.power_calculation}
-          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
-            power: {capabilities.power_calculation}
-          </span>
-        {/if}
-        {#if capabilities?.kernel}
-          <span class="rounded-full border border-line px-3 py-1 font-mono text-mist">
-            {capabilities.kernel}
-          </span>
-        {/if}
-      </div>
-
-      <ul class="mt-4 space-y-3">
-        {#each capabilities?.features ?? [] as feature}
-          <li class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
-            <div class="flex flex-wrap items-start justify-between gap-2">
-              <p class="text-sm font-medium">{feature.label}</p>
-              {#if feature.enabled}
-                <span class="rounded-full bg-mint/15 px-2.5 py-0.5 font-mono text-[11px] text-mint">Enabled ✓</span>
-              {:else}
-                <span class="rounded-full bg-rose/15 px-2.5 py-0.5 font-mono text-[11px] text-rose">Not supported</span>
-              {/if}
-            </div>
-            {#if feature.method && feature.method !== 'none'}
-              <p class="mt-1 font-mono text-[11px] text-sky">method: {feature.method} · {feature.detection_method}</p>
-            {:else}
-              <p class="mt-1 font-mono text-[11px] text-mist">{feature.detection_method}</p>
-            {/if}
-            <p class="mt-1 text-sm text-mist">{feature.recommendation}</p>
-            {#if !feature.enabled && feature.why_not}
-              <p class="mt-1 text-xs text-amber">{feature.why_not}</p>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-
-      <div class="mt-4">
-        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Tools</h3>
-        <div class="mt-2 flex flex-wrap gap-2">
-          {#each toolChips(capabilities?.tools) as chip}
-            <span
-              class={`rounded-full px-3 py-1 font-mono text-[11px] ${chip.on ? 'bg-mint/10 text-mint' : 'bg-rose/10 text-rose'}`}
-            >
-              {chip.label}
-            </span>
-          {/each}
-        </div>
-      </div>
-
-      <div class="mt-4">
-        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Kernel modules</h3>
-        <div class="mt-2 flex flex-wrap gap-2">
-          {#if (capabilities?.kernel_modules ?? []).length === 0}
-            <span class="text-xs text-mist">No vendor laptop modules detected</span>
-          {:else}
-            {#each capabilities?.kernel_modules ?? [] as mod}
-              <span class="rounded-full bg-sky/10 px-3 py-1 font-mono text-[11px] text-sky">{mod}</span>
-            {/each}
-          {/if}
-        </div>
-      </div>
-
-      <div class="mt-4">
-        <h3 class="text-xs font-medium uppercase tracking-[0.16em] text-mist">Sysfs fields</h3>
-        <div class="mt-2 flex flex-wrap gap-2">
-          {#each capabilities?.available_fields ?? [] as field}
-            <span class="rounded-full bg-mint/10 px-3 py-1 font-mono text-[11px] text-mint">{field}</span>
-          {/each}
-          {#each telemetry?.missing_fields ?? [] as field}
-            <span class="rounded-full bg-rose/10 px-3 py-1 font-mono text-[11px] text-rose">{field} missing</span>
-          {/each}
-        </div>
-      </div>
-      {#if telemetry?.warnings?.length}
-        <ul class="mt-3 space-y-1 text-xs text-amber">
-          {#each telemetry.warnings as warning}
-            <li>{warning}</li>
-          {/each}
-        </ul>
+    <div id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard" hidden={tab !== 'dashboard'}>
+      {#if tab === 'dashboard'}
+        <DashboardTab {telemetry} {capabilities} {updatedAt} {scanning} onrescan={() => void rescan()} />
       {/if}
-    </section>
+    </div>
 
-    <ConfigPanel />
-  </div>
+    <div id="panel-safety" role="tabpanel" aria-labelledby="tab-safety" hidden={tab !== 'safety'}>
+      {#if tab === 'safety'}
+        <SafetyTab />
+      {/if}
+    </div>
+
+    <div id="panel-auto-drain" role="tabpanel" aria-labelledby="tab-auto-drain" hidden={tab !== 'auto-drain'}>
+      {#if tab === 'auto-drain'}
+        <AutoDrainTab />
+      {/if}
+    </div>
+
+    <div id="panel-notifications" role="tabpanel" aria-labelledby="tab-notifications" hidden={tab !== 'notifications'}>
+      {#if tab === 'notifications'}
+        <NotificationsTab />
+      {/if}
+    </div>
+
+    <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden={tab !== 'settings'}>
+      {#if tab === 'settings'}
+        <SettingsTab />
+      {/if}
+    </div>
+  </main>
 </div>

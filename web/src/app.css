@@ -2,35 +2,50 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+  LapGuard v2.0 — Linear visual language.
+  DESIGN.md: ~/.cursor/reference/awesome-design-md/design-md/linear.app/DESIGN.md
+  Product canvas/surface from the overhaul brief (#0D0D0D / #2D2D2D);
+  accent, type, and hairlines from Linear tokens.
+*/
 :root {
-  --lg-ink: #f3f1eb;
-  --lg-ink-soft: #ece7dc;
-  --lg-panel: #fffdf8;
-  --lg-line: #d7d0c3;
-  --lg-mist: #66707f;
-  --lg-snow: #171b22;
-  --lg-mint: #0f8a5f;
-  --lg-amber: #b86a00;
-  --lg-rose: #c43d4e;
-  --lg-sky: #1d6ea8;
+  --lg-canvas: #0d0d0d;
+  --lg-ink: #0d0d0d;
+  --lg-ink-soft: #161616;
+  --lg-panel: #2d2d2d;
+  --lg-surface-1: #161616;
+  --lg-surface-2: #1c1c1c;
+  --lg-line: #3e3e44;
+  --lg-hairline: #23252a;
+  --lg-mist: #8a8f98;
+  --lg-snow: #f7f8f8;
+  --lg-ink-muted: #d0d6e0;
+  --lg-primary: #5e6ad2;
+  --lg-primary-hover: #828fff;
+  --lg-primary-focus: #5e69d1;
+  --lg-mint: #27a644;
+  --lg-amber: #d29922;
+  --lg-rose: #eb5757;
+  --lg-sky: #5e6ad2;
 }
 
 .dark {
-  --lg-ink: #0b0d10;
-  --lg-ink-soft: #12151b;
-  --lg-panel: #171b22;
-  --lg-line: #2a3140;
-  --lg-mist: #8b95a5;
-  --lg-snow: #e8eef6;
-  --lg-mint: #7ee0b0;
-  --lg-amber: #ffb454;
-  --lg-rose: #ff6b7a;
-  --lg-sky: #7ec8ff;
+  --lg-canvas: #0d0d0d;
+  --lg-ink: #0d0d0d;
+  --lg-ink-soft: #161616;
+  --lg-panel: #2d2d2d;
+  --lg-line: #3e3e44;
+  --lg-mist: #8a8f98;
+  --lg-snow: #f7f8f8;
+  --lg-mint: #27a644;
+  --lg-amber: #d29922;
+  --lg-rose: #eb5757;
+  --lg-sky: #5e6ad2;
 }
 
 @theme {
-  --font-sans: 'Outfit', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --color-ink: var(--lg-ink);
   --color-ink-soft: var(--lg-ink-soft);
   --color-panel: var(--lg-panel);
@@ -41,6 +56,8 @@
   --color-amber: var(--lg-amber);
   --color-rose: var(--lg-rose);
   --color-sky: var(--lg-sky);
+  --color-primary: var(--lg-primary);
+  --color-canvas: var(--lg-canvas);
 }
 
 html,
@@ -49,20 +66,147 @@ body,
   min-height: 100%;
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--lg-ink);
+  background: var(--lg-canvas);
+  color: var(--lg-snow);
+  letter-spacing: -0.05px;
+}
+
+.lg-card {
+  background: var(--lg-panel);
+  border: 1px solid var(--lg-hairline);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 8px 24px rgb(0 0 0 / 0.28);
+}
+
+.lg-card-nested {
+  background: var(--lg-ink-soft);
+  border: 1px solid var(--lg-hairline);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.lg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+.lg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.lg-btn-primary {
+  background: var(--lg-primary);
+  color: #fff;
+}
+
+.lg-btn-primary:hover:not(:disabled) {
+  background: var(--lg-primary-hover);
+}
+
+.lg-btn-primary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--lg-primary-focus) 50%, transparent);
+  outline-offset: 2px;
+}
+
+.lg-btn-secondary {
+  background: var(--lg-surface-1);
+  color: var(--lg-snow);
+  border-color: var(--lg-hairline);
+}
+
+.lg-btn-secondary:hover:not(:disabled) {
+  background: var(--lg-surface-2);
+  border-color: var(--lg-line);
+}
+
+.lg-btn-danger {
+  background: transparent;
+  color: var(--lg-rose);
+  border-color: color-mix(in srgb, var(--lg-rose) 45%, transparent);
+}
+
+.lg-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--lg-rose) 12%, transparent);
+}
+
+.lg-input,
+.lg-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--lg-hairline);
+  background: var(--lg-surface-1);
+  color: var(--lg-snow);
+  font-size: 14px;
+}
+
+.lg-input:focus,
+.lg-select:focus {
+  outline: 2px solid color-mix(in srgb, var(--lg-primary-focus) 50%, transparent);
+  outline-offset: 1px;
+  border-color: var(--lg-primary-focus);
+}
+
+.lg-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  background: var(--lg-surface-2);
+  color: var(--lg-ink-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lg-nav {
+  height: 56px;
+  background: var(--lg-canvas);
+  border-bottom: 1px solid var(--lg-hairline);
+}
+
+.lg-tab {
+  border: 0;
+  background: transparent;
+  color: var(--lg-mist);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.lg-tab[aria-selected='true'] {
+  background: var(--lg-surface-2);
   color: var(--lg-snow);
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--lg-mint) 14%, transparent), transparent 55%),
-    radial-gradient(800px 400px at 100% 100%, color-mix(in srgb, var(--lg-amber) 10%, transparent), transparent 50%);
-  z-index: -2;
+.lg-tab:hover:not([aria-selected='true']) {
+  color: var(--lg-ink-muted);
 }

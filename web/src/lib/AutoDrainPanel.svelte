@@ -99,11 +99,11 @@
   });
 </script>
 
-<section class="rounded-2xl border border-line bg-panel/70 px-4 py-4">
+<section class="lg-card">
   <div class="flex flex-wrap items-start justify-between gap-2">
     <div>
-      <h2 class="text-sm font-medium">Smart automatic drain</h2>
-      <p class="mt-1 text-xs text-mist">
+      <h2 class="text-[22px] font-medium tracking-tight">Smart automatic drain</h2>
+      <p class="mt-1 text-sm text-mist">
         Optional low-battery drain. Off by default. Never runs without a notification, and host
         commands still require <span class="font-mono">docker.stop_enabled</span>,
         <span class="font-mono">safety.dry_run=false</span>, and
@@ -128,14 +128,14 @@
   {/if}
 
   <div class="mt-4 grid gap-3 sm:grid-cols-3">
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">State</p>
       <p class="mt-1 font-mono text-lg {stateClass}">{status?.state ?? '—'}</p>
       {#if status?.reason}
         <p class="mt-1 text-[11px] text-mist">{status.reason}</p>
       {/if}
     </article>
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">Threshold</p>
       <p class="mt-1 font-mono text-lg">{status?.battery_threshold_percent ?? '—'}%</p>
       <p class="mt-1 text-[11px] text-mist">
@@ -145,7 +145,7 @@
         {/if}
       </p>
     </article>
-    <article class="rounded-2xl border border-line bg-ink-soft/50 px-4 py-3">
+    <article class="lg-card-nested">
       <p class="text-xs text-mist">Response wait</p>
       <p class="mt-1 font-mono text-lg">
         {#if awaiting}
@@ -166,7 +166,7 @@
     <div class="mt-4 flex flex-wrap gap-2">
       <button
         type="button"
-        class="rounded-full border border-rose/40 bg-rose/10 px-3 py-1 text-xs text-rose transition hover:border-rose disabled:opacity-50"
+        class="lg-btn lg-btn-danger"
         disabled={responding}
         onclick={() => void respond('yes')}
       >
@@ -174,7 +174,7 @@
       </button>
       <button
         type="button"
-        class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        class="lg-btn lg-btn-secondary"
         disabled={responding}
         onclick={() => void respond('no')}
       >
@@ -197,7 +197,7 @@
     <label class="text-xs text-mist">
       Battery threshold (%)
       <input
-        class="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
+        class="lg-input mt-1 font-mono"
         type="number"
         min="1"
         max="100"
@@ -207,7 +207,7 @@
     <label class="text-xs text-mist">
       Message lead time (min)
       <input
-        class="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
+        class="lg-input mt-1 font-mono"
         type="number"
         min="1"
         max="1440"
@@ -217,7 +217,7 @@
     <label class="text-xs text-mist">
       Response timeout (min)
       <input
-        class="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-snow"
+        class="lg-input mt-1 font-mono"
         type="number"
         min="1"
         max="1440"
@@ -227,7 +227,7 @@
     <div class="sm:col-span-2">
       <button
         type="submit"
-        class="rounded-full border border-line px-3 py-1 text-xs text-mist transition hover:border-mist hover:text-snow disabled:opacity-50"
+        class="lg-btn lg-btn-primary"
         disabled={saving}
       >
         {saving ? 'Saving…' : 'Save auto-drain'}
