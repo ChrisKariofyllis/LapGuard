@@ -53,11 +53,19 @@
   };
 
   const ringClass: Record<StatusTone, string> = {
-    charge: 'stroke-mint',
-    discharge: 'stroke-amber',
-    full: 'stroke-mint',
-    idle: 'stroke-sky',
-    missing: 'stroke-rose',
+    charge: 'stroke-mint text-mint lg-ring-glow',
+    discharge: 'stroke-amber text-amber lg-ring-glow',
+    full: 'stroke-mint text-mint lg-ring-glow',
+    idle: 'stroke-sky text-sky lg-ring-glow',
+    missing: 'stroke-rose text-rose lg-ring-glow',
+  };
+
+  const statusBadge: Record<StatusTone, string> = {
+    charge: 'lg-badge--ok',
+    discharge: 'lg-badge--warn',
+    full: 'lg-badge--ok',
+    idle: 'lg-badge--info',
+    missing: 'lg-badge--err',
   };
 
   function toolChips(tools: Tools | undefined): { label: string; on: boolean }[] {
@@ -71,18 +79,18 @@
   }
 </script>
 
-<div class="flex flex-col gap-5">
+<div class="flex flex-col gap-6">
   <section class="lg-card">
-    <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-between">
-      <div class="relative grid place-items-center">
-        <svg width="220" height="220" viewBox="0 0 220 220">
-          <circle cx="110" cy="110" r={ring.radius} class="fill-none stroke-line" stroke-width="14" />
+    <div class="flex flex-col items-center gap-8 sm:flex-row sm:items-center sm:justify-between">
+      <div class={`lg-gauge lg-gauge--${tone} relative grid place-items-center`}>
+        <svg width="240" height="240" viewBox="0 0 220 220" aria-hidden="true">
+          <circle cx="110" cy="110" r={ring.radius} class="lg-ring-track fill-none" stroke-width="12" />
           <circle
             cx="110"
             cy="110"
             r={ring.radius}
             class={`fill-none ${ringClass[tone]}`}
-            stroke-width="14"
+            stroke-width="12"
             stroke-linecap="round"
             stroke-dasharray={`${ring.dash} ${ring.circ}`}
             transform="rotate(-90 110 110)"
@@ -90,10 +98,17 @@
         </svg>
         <div class="absolute inset-0 grid place-items-center text-center">
           <div>
-            <p class="font-mono text-5xl font-medium tracking-tight">
-              {capacity === undefined ? '—' : capacity}<span class="text-2xl text-mist">%</span>
+            <p class="lg-hero-num font-mono text-6xl font-medium">
+              {capacity === undefined ? '—' : capacity}<span class="text-2xl font-normal text-mist">%</span>
             </p>
-            <p class={`mt-1 text-sm font-medium ${toneClass[tone]}`}>
+            <p class={`lg-badge mt-3 ${statusBadge[tone]}`}>
+              {#if tone === 'charge' || tone === 'full'}
+                <svg class="h-3 w-3" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.2 1.2 4 8.4h3.2L6.8 14.8 12 7.6H8.8z"/></svg>
+              {:else if tone === 'discharge'}
+                <svg class="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="4.5" width="9.5" height="7" rx="1.4"/><path d="M13.5 7v2M5 8h4"/></svg>
+              {:else}
+                <span class={`h-1.5 w-1.5 rounded-full ${toneClass[tone].replace('text-', 'bg-')}`}></span>
+              {/if}
               {statusLabel(battery?.status, present)}
             </p>
           </div>
@@ -102,12 +117,12 @@
 
       <div class="w-full flex-1 space-y-4">
         <div>
-          <p class="text-[13px] font-medium tracking-[0.4px] text-mist uppercase">{powerHeading}</p>
-          <p class="mt-1 font-mono text-4xl font-medium tracking-tight">
+          <p class="lg-stat-label">{powerHeading}</p>
+          <p class="lg-hero-num mt-1 font-mono text-4xl font-medium tracking-tight">
             {fmtNumber(power, 2)}
-            <span class="text-lg text-mist">W</span>
+            <span class="text-lg font-normal text-mist">W</span>
           </p>
-          <p class="mt-1 text-sm text-mist">
+          <p class="mt-2 text-sm leading-relaxed text-mist">
             {#if !present}
               No pack detected. Auto-fallback to mock is available with <span class="font-mono">--provider mock</span>.
             {:else}
@@ -127,56 +142,56 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-4">
           <div class="lg-card-nested">
-            <p class="text-xs text-mist">Health</p>
-            <p class={`mt-1 font-mono text-xl ${toneClass[healthTone(battery?.health_percent)]}`}>
+            <p class="lg-stat-label">Health</p>
+            <p class={`lg-stat-value mt-2 ${toneClass[healthTone(battery?.health_percent)]}`}>
               {fmtNumber(battery?.health_percent, 1, '%')}
             </p>
           </div>
           <div class="lg-card-nested">
-            <p class="text-xs text-mist">Cycles</p>
-            <p class="mt-1 font-mono text-xl">{fmtInt(battery?.cycle_count)}</p>
+            <p class="lg-stat-label">Cycles</p>
+            <p class="lg-stat-value mt-2">{fmtInt(battery?.cycle_count)}</p>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+  <section class="grid grid-cols-2 gap-4 sm:grid-cols-3">
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Voltage</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.voltage_now_v, 3, ' V')}</p>
+      <p class="lg-stat-label">Voltage</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(battery?.voltage_now_v, 3, ' V')}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Current</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.current_now_a, 3, ' A')}</p>
+      <p class="lg-stat-label">Current</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(battery?.current_now_a, 3, ' A')}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">{powerHeading}</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(power, 2, ' W')}</p>
+      <p class="lg-stat-label">{powerHeading}</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(power, 2, ' W')}</p>
       {#if derivedPower}
-        <p class="mt-1 text-[11px] text-mist">current_now × voltage_now</p>
+        <p class="mt-1 text-[11px] leading-relaxed text-mist">current_now × voltage_now</p>
       {/if}
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Energy full</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.energy_full_wh, 1, ' Wh')}</p>
+      <p class="lg-stat-label">Energy full</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(battery?.energy_full_wh, 1, ' Wh')}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Design full</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.energy_full_design_wh, 1, ' Wh')}</p>
+      <p class="lg-stat-label">Design full</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(battery?.energy_full_design_wh, 1, ' Wh')}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Pack</p>
-      <p class="mt-2 font-mono text-lg">{battery?.name ?? '—'}</p>
+      <p class="lg-stat-label">Pack</p>
+      <p class="lg-stat-value mt-2">{battery?.name ?? '—'}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Temperature</p>
-      <p class="mt-2 font-mono text-lg">{fmtNumber(battery?.temperature_c, 1, ' °C')}</p>
+      <p class="lg-stat-label">Temperature</p>
+      <p class="lg-stat-value mt-2">{fmtNumber(battery?.temperature_c, 1, ' °C')}</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Identity</p>
+      <p class="lg-stat-label">Identity</p>
       <p class="mt-2 font-mono text-sm leading-snug">
         {battery?.manufacturer || capabilities?.battery?.manufacturer || '—'}
         {#if battery?.model_name || capabilities?.battery?.model}
@@ -185,14 +200,14 @@
       </p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Estimated time left</p>
-      <p class="mt-2 font-mono text-lg">
+      <p class="lg-stat-label">Estimated time left</p>
+      <p class="lg-stat-value mt-2">
         {fmtEstimatedRuntime(battery?.estimated_runtime_seconds, battery?.estimated_runtime_available)}
       </p>
       {#if battery?.estimated_runtime_available}
-        <p class="mt-1 text-[11px] text-mist">Based on current battery usage</p>
+        <p class="mt-1 text-[11px] leading-relaxed text-mist">Based on current battery usage</p>
       {:else}
-        <p class="mt-1 text-[11px] text-mist">
+        <p class="mt-1 text-[11px] leading-relaxed text-mist">
           {battery?.estimated_runtime_reason ?? 'Available while discharging'}
         </p>
       {/if}
@@ -244,9 +259,9 @@
           <div class="flex flex-wrap items-start justify-between gap-2">
             <p class="text-sm font-medium">{feature.label}</p>
             {#if feature.enabled}
-              <span class="rounded-full bg-mint/15 px-2.5 py-0.5 font-mono text-[11px] text-mint">Enabled ✓</span>
+              <span class="lg-badge lg-badge--ok font-mono text-[11px]">Enabled</span>
             {:else}
-              <span class="rounded-full bg-rose/15 px-2.5 py-0.5 font-mono text-[11px] text-rose">Not supported</span>
+              <span class="lg-badge lg-badge--err font-mono text-[11px]">Not supported</span>
             {/if}
           </div>
           {#if feature.method && feature.method !== 'none'}
@@ -266,7 +281,7 @@
       <h3 class="text-[13px] font-medium tracking-[0.4px] text-mist uppercase">Tools</h3>
       <div class="mt-2 flex flex-wrap gap-2">
         {#each toolChips(capabilities?.tools) as chip}
-          <span class={`rounded-full px-3 py-1 font-mono text-[11px] ${chip.on ? 'bg-mint/10 text-mint' : 'bg-rose/10 text-rose'}`}>
+          <span class={`lg-badge font-mono text-[11px] ${chip.on ? 'lg-badge--ok' : 'lg-badge--err'}`}>
             {chip.label}
           </span>
         {/each}
@@ -280,7 +295,7 @@
           <span class="text-xs text-mist">No vendor laptop modules detected</span>
         {:else}
           {#each capabilities?.kernel_modules ?? [] as mod}
-            <span class="rounded-full bg-sky/10 px-3 py-1 font-mono text-[11px] text-sky">{mod}</span>
+            <span class="lg-badge lg-badge--info font-mono text-[11px]">{mod}</span>
           {/each}
         {/if}
       </div>
@@ -290,10 +305,10 @@
       <h3 class="text-[13px] font-medium tracking-[0.4px] text-mist uppercase">Sysfs fields</h3>
       <div class="mt-2 flex flex-wrap gap-2">
         {#each capabilities?.available_fields ?? [] as field}
-          <span class="rounded-full bg-mint/10 px-3 py-1 font-mono text-[11px] text-mint">{field}</span>
+          <span class="lg-badge lg-badge--ok font-mono text-[11px]">{field}</span>
         {/each}
         {#each telemetry?.missing_fields ?? [] as field}
-          <span class="rounded-full bg-rose/10 px-3 py-1 font-mono text-[11px] text-rose">{field} missing</span>
+          <span class="lg-badge lg-badge--err font-mono text-[11px]">{field} missing</span>
         {/each}
       </div>
     </div>

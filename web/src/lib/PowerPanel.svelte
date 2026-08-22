@@ -18,14 +18,14 @@
     }
   });
 
-  const sourceClass = $derived.by(() => {
+  const sourceBadge = $derived.by(() => {
     switch (power?.source) {
       case 'AC':
-        return 'text-mint';
+        return 'lg-badge--ok';
       case 'BATTERY':
-        return 'text-amber';
+        return 'lg-badge--warn';
       default:
-        return 'text-rose';
+        return 'lg-badge--err';
     }
   });
 
@@ -94,7 +94,7 @@
         Mains adapters are discovered from sysfs <span class="font-mono">type=Mains</span>. Names are not hardcoded.
       </p>
     </div>
-        <span class="lg-badge font-mono uppercase tracking-wider {sourceClass}">
+        <span class="lg-badge font-mono uppercase tracking-wider {sourceBadge}">
           {power ? sourceLabel : '…'}
         </span>
   </div>
@@ -111,7 +111,7 @@
     <ul class="mt-3 flex flex-wrap gap-2">
       {#each power?.adapters ?? [] as adapter}
         <li
-          class={`rounded-full px-3 py-1 font-mono text-[11px] ${adapter.readable && adapter.online ? 'bg-mint/10 text-mint' : adapter.readable ? 'bg-amber/10 text-amber' : 'bg-rose/10 text-rose'}`}
+          class={`lg-badge font-mono text-[11px] ${adapter.readable && adapter.online ? 'lg-badge--ok' : adapter.readable ? 'lg-badge--warn' : 'lg-badge--err'}`}
         >
           {adapter.name}
           {#if !adapter.readable}

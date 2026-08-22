@@ -122,39 +122,37 @@
         <img
           src="/lapguard-logo.jpg"
           alt="LapGuard"
-          class="h-7 w-7 rounded-md object-cover"
+          class="h-7 w-7 rounded-md object-cover ring-1 ring-white/10"
           width="28"
           height="28"
         />
         <div class="hidden leading-tight sm:block">
-          <p class="text-sm font-medium tracking-tight">LapGuard</p>
-          <p class="font-mono text-[11px] text-mist">{capabilities?.version ?? '…'}</p>
+          <p class="text-[13px] font-medium tracking-tight">LapGuard</p>
+          <p class="font-mono text-[11px] leading-snug text-mist">{capabilities?.version ?? '…'}</p>
         </div>
       </div>
 
-      <div
-        class="flex min-w-0 flex-1 items-center justify-start overflow-x-auto sm:justify-center"
-        role="tablist"
-        aria-label="LapGuard sections"
-      >
-        {#each TABS as item}
-          <button
-            type="button"
-            class="lg-tab shrink-0"
-            role="tab"
-            id="tab-{item.id}"
-            aria-selected={tab === item.id}
-            aria-controls="panel-{item.id}"
-            tabindex={tab === item.id ? 0 : -1}
-            onclick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        {/each}
+      <div class="flex min-w-0 flex-1 justify-start sm:justify-center">
+        <div class="lg-tabs overflow-x-auto" role="tablist" aria-label="LapGuard sections">
+          {#each TABS as item}
+            <button
+              type="button"
+              class="lg-tab shrink-0"
+              role="tab"
+              id="tab-{item.id}"
+              aria-selected={tab === item.id}
+              aria-controls="panel-{item.id}"
+              tabindex={tab === item.id ? 0 : -1}
+              onclick={() => setTab(item.id)}
+            >
+              {item.label}
+            </button>
+          {/each}
+        </div>
       </div>
 
       <div class="flex shrink-0 items-center gap-2">
-        <span class="lg-badge hidden items-center gap-1.5 font-mono sm:inline-flex">
+        <span class="lg-badge hidden font-mono sm:inline-flex {tone === 'missing' ? 'lg-badge--err' : tone === 'discharge' ? 'lg-badge--warn' : tone === 'idle' ? 'lg-badge--info' : 'lg-badge--ok'}">
           <span class={`h-1.5 w-1.5 rounded-full ${toneDot[tone]}`}></span>
           {capacity === undefined ? '—' : `${capacity}%`}
           · {statusLabel(battery?.status, present)}
@@ -164,15 +162,15 @@
     </div>
   </header>
 
-  <main class="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6">
+  <main class="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8">
     {#if error}
-      <div class="mb-5 rounded-xl border border-rose/40 bg-rose/10 px-4 py-3 text-sm text-rose">
+      <div class="mb-6 rounded-xl border border-rose/40 bg-rose/10 px-4 py-3 text-sm leading-relaxed text-rose">
         {error}. Start the Go API on 127.0.0.1:8585 if it is not running.
       </div>
     {/if}
 
     {#if capabilities?.auth_enabled && tab !== 'settings'}
-      <section class="lg-card mb-5 text-sm">
+      <section class="lg-card mb-6 text-sm leading-relaxed">
         <p class="font-medium">Token setup</p>
         <p class="mt-1 text-mist">
           {#if isLoopbackPage()}

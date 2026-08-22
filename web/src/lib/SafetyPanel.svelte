@@ -8,18 +8,18 @@
   let notice = $state<string | null>(null);
   let testing = $state(false);
 
-  const stateClass = $derived.by(() => {
+  const stateBadge = $derived.by(() => {
     switch (safety?.state) {
       case 'NORMAL':
       case 'AC_CONNECTED':
-        return 'text-mint';
+        return 'lg-badge--ok';
       case 'WARNING':
-        return 'text-amber';
+        return 'lg-badge--warn';
       case 'CRITICAL':
       case 'SHUTDOWN_PENDING':
-        return 'text-rose';
+        return 'lg-badge--err';
       default:
-        return 'text-mist';
+        return '';
     }
   });
 
@@ -68,7 +68,7 @@
       <h2 class="text-[22px] font-medium tracking-tight">Safety controller</h2>
       <p class="mt-1 text-sm text-mist">Monitors battery percent while discharging. Automatic host commands are not executed.</p>
     </div>
-    <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">
+    <span class="lg-badge lg-badge--warn font-mono">
       {safety?.dry_run === false ? 'Automatic dry-run' : 'Dry-run'}
     </span>
   </div>
@@ -86,19 +86,21 @@
 
   <div class="mt-4 grid gap-3 sm:grid-cols-3">
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">State</p>
-      <p class="mt-1 font-mono text-lg {stateClass}">{safety?.state ?? '—'}</p>
+      <p class="lg-stat-label">State</p>
+      <p class="mt-2">
+        <span class="lg-badge font-mono {stateBadge}">{safety?.state ?? '—'}</span>
+      </p>
       {#if safety?.reason}
         <p class="mt-1 text-[11px] text-mist">{safety.reason}</p>
       {/if}
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Warning</p>
-      <p class="mt-1 font-mono text-lg">{safety?.warning_threshold ?? '—'}%</p>
+      <p class="lg-stat-label">Warning</p>
+      <p class="lg-stat-value mt-2">{safety?.warning_threshold ?? '—'}%</p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Critical</p>
-      <p class="mt-1 font-mono text-lg">{safety?.critical_threshold ?? '—'}%</p>
+      <p class="lg-stat-label">Critical</p>
+      <p class="lg-stat-value mt-2">{safety?.critical_threshold ?? '—'}%</p>
     </article>
   </div>
 

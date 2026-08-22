@@ -15,20 +15,20 @@
   let timeoutMinutes = $state(10);
 
   const awaiting = $derived(Boolean(status?.awaiting_response));
-  const stateClass = $derived.by(() => {
+  const stateBadge = $derived.by(() => {
     switch (status?.state) {
       case 'AUTO_DRAIN_IDLE':
-        return 'text-mint';
+        return 'lg-badge--ok';
       case 'AUTO_DRAIN_WARNING_SENT':
       case 'AUTO_DRAIN_AWAITING_RESPONSE':
-        return 'text-amber';
+        return 'lg-badge--warn';
       case 'AUTO_DRAIN_EXECUTING':
       case 'AUTO_DRAIN_TIMEOUT':
-        return 'text-rose';
+        return 'lg-badge--err';
       case 'AUTO_DRAIN_ABORTED':
-        return 'text-sky';
+        return 'lg-badge--info';
       default:
-        return 'text-mist';
+        return '';
     }
   });
 
@@ -110,7 +110,7 @@
         <span class="font-mono">actions.real_enabled=true</span>.
       </p>
     </div>
-    <span class="rounded-full bg-amber/15 px-2.5 py-0.5 font-mono text-[11px] text-amber">
+    <span class="lg-badge font-mono {status?.enabled ? 'lg-badge--warn' : 'lg-badge--err'}">
       {status?.enabled ? 'Experimental' : 'Disabled'}
     </span>
   </div>
@@ -129,15 +129,17 @@
 
   <div class="mt-4 grid gap-3 sm:grid-cols-3">
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">State</p>
-      <p class="mt-1 font-mono text-lg {stateClass}">{status?.state ?? '—'}</p>
+      <p class="lg-stat-label">State</p>
+      <p class="mt-2">
+        <span class="lg-badge font-mono {stateBadge}">{status?.state ?? '—'}</span>
+      </p>
       {#if status?.reason}
         <p class="mt-1 text-[11px] text-mist">{status.reason}</p>
       {/if}
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Threshold</p>
-      <p class="mt-1 font-mono text-lg">{status?.battery_threshold_percent ?? '—'}%</p>
+      <p class="lg-stat-label">Threshold</p>
+      <p class="lg-stat-value mt-2">{status?.battery_threshold_percent ?? '—'}%</p>
       <p class="mt-1 text-[11px] text-mist">
         {status?.discharging ? 'Discharging' : 'Not discharging'}
         {#if status?.battery_percent !== undefined && status?.battery_percent !== null}
@@ -146,8 +148,8 @@
       </p>
     </article>
     <article class="lg-card-nested">
-      <p class="text-xs text-mist">Response wait</p>
-      <p class="mt-1 font-mono text-lg">
+      <p class="lg-stat-label">Response wait</p>
+      <p class="lg-stat-value mt-2">
         {#if awaiting}
           {status?.seconds_remaining ?? 0}s
         {:else}
